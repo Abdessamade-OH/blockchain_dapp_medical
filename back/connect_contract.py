@@ -5,7 +5,7 @@ from web3 import Web3
 w3 = Web3(Web3.HTTPProvider('http://127.0.0.1:7545'))  # Ganache HTTP RPC URL
 
 # Load the ABI from the JSON file
-with open('contract_abi.json', 'r') as abi_file:
+with open('contract_patient_abi.json', 'r') as abi_file:
     contract_abi = json.load(abi_file)
 
 # Contract address (replace with your actual contract address from Ganache)

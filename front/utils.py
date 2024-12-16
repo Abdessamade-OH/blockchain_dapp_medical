@@ -10,8 +10,6 @@ def validate_input(data, form_type):
             errors.append("Password is required.")
     
     elif form_type == 'doctor':
-        if not data.get("wallet_address"):
-            errors.append("Wallet Address is required.")
         if not data.get("name"):
             errors.append("Name is required.")
         if not data.get("specialization"):

@@ -4,6 +4,8 @@ import json
 import os
 from dotenv import load_dotenv
 from flask_cors import CORS
+from connect_doctor import register_doctor
+
 
 # Load environment variables from .env file
 load_dotenv()
@@ -20,7 +22,7 @@ if not w3.is_connected():
     exit()
 
 # Load the ABI from the JSON file
-with open('contract_abi.json', 'r') as abi_file:
+with open('contract_patient_abi.json', 'r') as abi_file:
     contract_abi = json.load(abi_file)
 
 # Contract address (replace with your actual contract address from Ganache)
@@ -28,6 +30,17 @@ contract_address = '0x973c5c85FADdd33FC29cdE75354accC49023568e'
 
 # Create contract instance
 patient_contract = w3.eth.contract(address=contract_address, abi=contract_abi)
+
+
+# Load the ABI for the doctor contract
+with open('contract_doctor_abi.json', 'r') as abi_file:
+    doctor_contract_abi = json.load(abi_file)
+
+# Contract address for the doctor contract (replace with actual address from Ganache)
+doctor_contract_address = '0xd8b934580fcE35a11B58C6D73aDeE468a2833fa8'
+
+# Create contract instance for the doctor contract
+doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)
 
 # Get the account from Ganache (the first account in the list, for example)
 account_address = w3.eth.accounts[0]
@@ -74,13 +87,12 @@ def register_patient():
         # Send the signed transaction
         tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
 
-        # Wait for the transaction receipt
         tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-        
+
         return jsonify({
             "status": "success",
             "transaction_hash": tx_hash.hex(),  # Convert HexBytes to string
-            "transaction_receipt": {           # Serialize the receipt
+            "transaction_receipt": {
                 "blockHash": tx_receipt.blockHash.hex(),
                 "blockNumber": tx_receipt.blockNumber,
                 "contractAddress": tx_receipt.contractAddress,
@@ -90,6 +102,7 @@ def register_patient():
                 "transactionIndex": tx_receipt.transactionIndex
             }
         })
+
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -120,6 +133,96 @@ def login_patient():
         return jsonify({"error": str(e)}), 500
 
 
+
+@app.route('/register_doctor', methods=['POST'])
+def register_doctor_endpoint():
+    data = request.get_json()
+
+    # Required fields for doctor registration
+    required_fields = ['name', 'specialization', 'hospital_name', 'hh_number', 'password']
+    if not all(field in data for field in required_fields):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        # Call the `register_doctor` function from connect_doctor.py
+        response = register_doctor(
+            name=data['name'],
+            specialization=data['specialization'],
+            hospital_name=data['hospital_name'],
+            hh_number=data['hh_number'],
+            password=data['password'],
+            private_key=private_key
+        )
+
+        # Process the response from `register_doctor`
+        if response['status'] == 'success':
+            # Serialize the receipt for the response
+            tx_receipt = response['receipt']
+            serialized_receipt = {
+                "blockHash": tx_receipt.blockHash.hex(),
+                "blockNumber": tx_receipt.blockNumber,
+                "contractAddress": tx_receipt.contractAddress,
+                "cumulativeGasUsed": tx_receipt.cumulativeGasUsed,
+                "gasUsed": tx_receipt.gasUsed,
+                "status": tx_receipt.status,
+                "transactionIndex": tx_receipt.transactionIndex
+            }
+
+            return jsonify({"status": "success", "transaction_receipt": serialized_receipt})
+        else:
+            # Handle errors
+            return jsonify({"error": response['message']}), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/login_doctor', methods=['POST'])
+def login_doctor():
+    data = request.get_json()
+
+    # Validate the required fields
+    required_fields = ['hh_number', 'password']
+    if not all(field in data for field in required_fields):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        # Example of a state-modifying function, using .send_transaction() instead of .call()
+        nonce = w3.eth.get_transaction_count(account_address)
+
+        transaction = doctor_contract.functions.validateDoctorLogin(
+            data['hh_number'],  # Health number
+            data['password']    # Password
+        ).build_transaction({
+            'from': account_address,
+            'gas': 2000000,
+            'gasPrice': w3.to_wei('20', 'gwei'),
+            'nonce': nonce,
+        })
+
+        # Sign the transaction
+        signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
+
+        # Send the signed transaction
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+        return jsonify({
+            "status": "success",
+            "transaction_hash": tx_hash.hex(),  # Convert HexBytes to string
+            "transaction_receipt": {
+                "blockHash": tx_receipt.blockHash.hex(),
+                "blockNumber": tx_receipt.blockNumber,
+                "contractAddress": tx_receipt.contractAddress,
+                "cumulativeGasUsed": tx_receipt.cumulativeGasUsed,
+                "gasUsed": tx_receipt.gasUsed,
+                "status": tx_receipt.status,
+                "transactionIndex": tx_receipt.transactionIndex
+            }
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Run the Flask app
 if __name__ == '__main__':
