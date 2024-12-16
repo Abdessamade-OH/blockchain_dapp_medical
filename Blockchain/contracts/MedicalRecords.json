@@ -1,0 +1,9 @@
+// {
+//     "abi": [
+//         // Your contract ABI from Remix
+//     ],
+//     "addresses": {
+//         "patient": "YOUR_PATIENT_CONTRACT_ADDRESS",
+//         "doctor": "YOUR_DOCTOR_CONTRACT_ADDRESS"
+//     }
+// }
