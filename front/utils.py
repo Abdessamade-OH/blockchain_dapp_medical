@@ -1,14 +1,32 @@
 import customtkinter
 
-# Function to validate user input
-def validate_input(data):
+def validate_input(data, form_type):
     errors = []
-    for key, value in data.items():
-        if not value.strip():
-            errors.append(f"{key.capitalize()} is required.")
+    
+    if form_type == 'patient':
+        if not data.get("name"):
+            errors.append("Name is required.")
+        if not data.get("hh_number"):
+            errors.append("HH Number is required.")
+        if not data.get("password"):
+            errors.append("Password is required.")
+    
+    elif form_type == 'doctor':
+        if not data.get("wallet_address"):
+            errors.append("Wallet Address is required.")
+        if not data.get("name"):
+            errors.append("Name is required.")
+        if not data.get("specialization"):
+            errors.append("Specialization is required.")
+        if not data.get("hospital_name"):
+            errors.append("Hospital Name is required.")
+        if not data.get("hh_number"):
+            errors.append("HH Number is required.")
+        if not data.get("password"):
+            errors.append("Password is required.")
+    
     return errors
 
-# Function to show messages (success or error)
 def show_message(frame, message, color):
-    message_label = customtkinter.CTkLabel(frame, text=message, text_color=color, bg_color="#EAF6F6")
-    message_label.pack(pady=5)
+    msg_label = customtkinter.CTkLabel(frame, text=message, text_color=color, bg_color="#EAF6F6")
+    msg_label.pack(pady=5)

@@ -1,4 +1,4 @@
-# register.py
+# register_doctor.py
 import customtkinter
 import requests
 from utils import validate_input, show_message  # Helper functions (if needed)
@@ -8,14 +8,12 @@ REGISTER_URL = "http://127.0.0.1:5000/register"
 def show_login_from_register(register_frame, login_page_callback):
     login_page_callback()
 
-def register_patient_to_backend(register_frame):
+def register_doctor_to_backend(register_frame):
     data = {
+        "wallet_address": wallet_address_entry.get(),
         "name": name_entry.get(),
-        "dob": dob_entry.get(),
-        "gender": gender_entry.get(),
-        "blood_group": blood_group_entry.get(),
-        "address": address_entry.get(),
-        "email": email_entry.get(),
+        "specialization": specialization_entry.get(),
+        "hospital_name": hospital_name_entry.get(),
         "hh_number": hh_number_entry.get(),
         "password": password_entry_reg.get()
     }
@@ -40,35 +38,29 @@ def register_patient_to_backend(register_frame):
     except requests.exceptions.RequestException as e:
         show_message(register_frame, "Request failed. Please check the backend connection.", "red")
 
-def show_register_page(register_frame, login_page_callback):
+def show_register_doctor_page(register_frame, login_page_callback):
     for widget in register_frame.winfo_children():
         widget.destroy()
 
-    register_label = customtkinter.CTkLabel(register_frame, text="Register", font=("Arial", 32), bg_color="#EAF6F6")
+    register_label = customtkinter.CTkLabel(register_frame, text="Register Doctor", font=("Arial", 32), bg_color="#EAF6F6")
     register_label.pack(pady=(50, 30))
 
     # Create a scrollable frame for the register form
     scrollable_frame = customtkinter.CTkScrollableFrame(register_frame)
     scrollable_frame.pack(padx=20, pady=20, fill="both", expand=True)
 
-    global name_entry, dob_entry, gender_entry, blood_group_entry, address_entry, email_entry, hh_number_entry, password_entry_reg
+    global name_entry, specialization_entry, hospital_name_entry, hh_number_entry, password_entry_reg, wallet_address_entry
+    wallet_address_entry = customtkinter.CTkEntry(scrollable_frame, placeholder_text="Wallet Address", corner_radius=0, width=300)
+    wallet_address_entry.pack(pady=10)
+
     name_entry = customtkinter.CTkEntry(scrollable_frame, placeholder_text="Name", corner_radius=0, width=300)
     name_entry.pack(pady=10)
 
-    dob_entry = customtkinter.CTkEntry(scrollable_frame, placeholder_text="Date of Birth", corner_radius=0, width=300)
-    dob_entry.pack(pady=10)
+    specialization_entry = customtkinter.CTkEntry(scrollable_frame, placeholder_text="Specialization", corner_radius=0, width=300)
+    specialization_entry.pack(pady=10)
 
-    gender_entry = customtkinter.CTkEntry(scrollable_frame, placeholder_text="Gender", corner_radius=0, width=300)
-    gender_entry.pack(pady=10)
-
-    blood_group_entry = customtkinter.CTkEntry(scrollable_frame, placeholder_text="Blood Group", corner_radius=0, width=300)
-    blood_group_entry.pack(pady=10)
-
-    address_entry = customtkinter.CTkEntry(scrollable_frame, placeholder_text="Home Address", corner_radius=0, width=300)
-    address_entry.pack(pady=10)
-
-    email_entry = customtkinter.CTkEntry(scrollable_frame, placeholder_text="Email", corner_radius=0, width=300)
-    email_entry.pack(pady=10)
+    hospital_name_entry = customtkinter.CTkEntry(scrollable_frame, placeholder_text="Hospital Name", corner_radius=0, width=300)
+    hospital_name_entry.pack(pady=10)
 
     hh_number_entry = customtkinter.CTkEntry(scrollable_frame, placeholder_text="Household Number", corner_radius=0, width=300)
     hh_number_entry.pack(pady=10)
@@ -79,6 +71,5 @@ def show_register_page(register_frame, login_page_callback):
     back_button = customtkinter.CTkButton(scrollable_frame, text="Back to Login", corner_radius=0, command=lambda: show_login_from_register(register_frame, login_page_callback))
     back_button.pack(pady=10)
 
-    register_button = customtkinter.CTkButton(scrollable_frame, text="Register Patient", corner_radius=0, command=lambda: register_patient_to_backend(register_frame))
+    register_button = customtkinter.CTkButton(scrollable_frame, text="Register Doctor", corner_radius=0, command=lambda: register_doctor_to_backend(register_frame))
     register_button.pack(pady=20)
-

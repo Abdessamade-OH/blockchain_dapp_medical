@@ -5,9 +5,13 @@ from utils import validate_input, show_message  # Helper functions (if needed)
 
 LOGIN_URL = "http://127.0.0.1:5000/login"
 
-def show_register_from_login(login_frame, register_page_callback):
-    # Call the function to show the register page using the callback
-    register_page_callback()
+def show_register_from_login(login_frame, register_page_callback, register_type="patient"):
+    if register_type == "doctor":
+        from register_doctor import show_register_doctor_page
+        show_register_doctor_page(login_frame, register_page_callback)
+    else:
+        from register_patient import show_register_page
+        show_register_page(login_frame, register_page_callback)
 
 def login_user_to_backend(login_frame):
     global username_entry, password_entry
@@ -54,8 +58,19 @@ def show_login_page(login_frame, register_page_callback):
     password_entry = customtkinter.CTkEntry(login_frame, placeholder_text="Password", show="*", corner_radius=0, width=300)
     password_entry.pack(pady=10)
 
-    login_button = customtkinter.CTkButton(login_frame, text="Login", corner_radius=0, command=lambda: login_user_to_backend(login_frame))
-    login_button.pack(pady=20)
+    # Login buttons: stack them vertically
+    button_frame = customtkinter.CTkFrame(login_frame, fg_color="#EAF6F6")
+    button_frame.pack(pady=20)
 
-    register_button = customtkinter.CTkButton(login_frame, text="Register", corner_radius=0, command=lambda: show_register_from_login(login_frame, register_page_callback))
-    register_button.pack(pady=20)
+    login_button = customtkinter.CTkButton(button_frame, text="Login Patient", corner_radius=0, command=lambda: login_user_to_backend(login_frame))
+    login_button.pack(side="top", fill="x", pady=5)
+
+    login_doctor_button = customtkinter.CTkButton(button_frame, text="Login Doctor", corner_radius=0, command=lambda: None)  # Placeholder action
+    login_doctor_button.pack(side="top", fill="x", pady=5)
+
+    # Register buttons: register for patient or doctor
+    register_button = customtkinter.CTkButton(button_frame, text="Register Patient", corner_radius=0, command=lambda: show_register_from_login(login_frame, register_page_callback, register_type="patient"))
+    register_button.pack(side="top", fill="x", pady=5)
+
+    register_doctor_button = customtkinter.CTkButton(button_frame, text="Register Doctor", corner_radius=0, command=lambda: show_register_from_login(login_frame, register_page_callback, register_type="doctor"))
+    register_doctor_button.pack(side="top", fill="x", pady=5)

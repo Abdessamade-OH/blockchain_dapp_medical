@@ -1,8 +1,8 @@
-# app.py
 import customtkinter
 from PIL import Image, ImageTk
 from login import show_login_page  # Import login page function from login.py
-from register import show_register_page  # Import register page function from register.py
+from register_patient import show_register_patient_page  # Import patient registration page
+from register_doctor import show_register_doctor_page  # Import doctor registration page
 
 # Set custom tkinter appearance and theme
 customtkinter.set_appearance_mode("light")
@@ -37,13 +37,21 @@ login_frame = customtkinter.CTkFrame(app, fg_color="#EAF6F6", corner_radius=0)
 login_frame.grid(row=0, column=1, sticky="nsew")
 
 # Register page function
-def register_page():
+def register_patient_page():
     # Clear current login frame
     for widget in login_frame.winfo_children():
         widget.destroy()
 
-    # Call show_register_page from register.py to show the registration form
-    show_register_page(login_frame, show_login_page_success)
+    # Call show_register_patient_page from register_patient.py
+    show_register_patient_page(login_frame, show_login_page_success)
+
+def register_doctor_page():
+    # Clear current login frame
+    for widget in login_frame.winfo_children():
+        widget.destroy()
+
+    # Call show_register_doctor_page from register_doctor.py
+    show_register_doctor_page(login_frame, show_login_page_success)
 
 # Function to show login page
 def show_login_page_success():
@@ -52,7 +60,7 @@ def show_login_page_success():
         widget.destroy()
 
     # Call show_login_page from login.py to show the login form
-    show_login_page(login_frame, register_page)
+    show_login_page(login_frame, register_patient_page)
 
 # Initial load of the login page
 show_login_page_success()
