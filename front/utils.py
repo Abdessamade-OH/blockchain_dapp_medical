@@ -4,8 +4,6 @@ def validate_input(data, form_type):
     errors = []
     
     if form_type == 'patient':
-        if not data.get("name"):
-            errors.append("Name is required.")
         if not data.get("hh_number"):
             errors.append("HH Number is required.")
         if not data.get("password"):
