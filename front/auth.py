@@ -77,3 +77,41 @@ def show_auth_page(app):
         command=lambda: show_register_doctor_page(app, show_auth_page)
     )
     register_doctor_button.pack(pady=10)
+
+
+def show_patient_dashboard(app):
+    # Clear the current screen
+    for widget in app.winfo_children():
+        widget.destroy()
+
+    # Create the dashboard frame
+    dashboard_frame = customtkinter.CTkFrame(app, fg_color="#EAF6F6")
+    dashboard_frame.pack(fill="both", expand=True)
+
+    # Add some content for patients
+    label = customtkinter.CTkLabel(dashboard_frame, text="Welcome to the Patient Dashboard!", font=("Arial", 24))
+    label.pack(pady=20)
+
+    logout_button = customtkinter.CTkButton(
+        dashboard_frame, text="Logout", command=lambda: show_auth_page(app)
+    )
+    logout_button.pack(pady=10)
+
+
+def show_doctor_dashboard(app):
+    # Clear the current screen
+    for widget in app.winfo_children():
+        widget.destroy()
+
+    # Create the dashboard frame
+    dashboard_frame = customtkinter.CTkFrame(app, fg_color="#EAF6F6")
+    dashboard_frame.pack(fill="both", expand=True)
+
+    # Add some content for doctors
+    label = customtkinter.CTkLabel(dashboard_frame, text="Welcome to the Doctor Dashboard!", font=("Arial", 24))
+    label.pack(pady=20)
+
+    logout_button = customtkinter.CTkButton(
+        dashboard_frame, text="Logout", command=lambda: show_auth_page(app)
+    )
+    logout_button.pack(pady=10)
