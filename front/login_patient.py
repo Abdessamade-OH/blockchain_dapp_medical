@@ -6,6 +6,7 @@ from patient_dashboard import show_patient_dashboard  # Import the patient dashb
 
 LOGIN_URL = "http://127.0.0.1:5000/login"
 
+
 def login_patient_to_backend(login_frame, app):
     data = {
         "hh_number": username_entry.get(),
@@ -28,9 +29,17 @@ def login_patient_to_backend(login_frame, app):
                 # Show a success message
                 show_message(login_frame, "Login successful!", "green")
 
-                # Pass patient info to the dashboard
-                patient_info = result.get("data", {})
-                show_patient_dashboard(app, patient_info)
+                # Fetch patient details using the hh_number
+                hh_number = data.get("hh_number")
+                patient_details_url = f"http://127.0.0.1:5000/get_patient_details?hh_number={hh_number}"
+                patient_details_response = requests.get(patient_details_url)
+
+                if patient_details_response.status_code == 200:
+                    patient_data = patient_details_response.json().get("patient_data", {})
+                    # Pass patient info to the dashboard
+                    show_patient_dashboard(app, patient_data)
+                else:
+                    show_message(login_frame, "Error fetching patient details", "red")
             else:
                 # Show error message on failure
                 show_message(login_frame, result.get("message", "Invalid credentials"), "red")
@@ -38,6 +47,7 @@ def login_patient_to_backend(login_frame, app):
             show_message(login_frame, "Error communicating with backend", "red")
     except requests.exceptions.RequestException as e:
         show_message(login_frame, "Request failed. Please check the backend connection.", "red")
+
 
 def show_login_patient_page(app, auth_page_callback):
     # Clear the frame and set up the login page

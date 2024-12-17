@@ -51,6 +51,38 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 
+
+# Route to fetch patient details by hh_number
+@app.route('/get_patient_details', methods=['GET'])
+def get_patient_details():
+    hh_number = request.args.get('hh_number')
+
+    if not hh_number:
+        return jsonify({"error": "Missing hh_number parameter"}), 400
+
+    try:
+        # Call the smart contract function to fetch patient details
+        patient_details = patient_contract.functions.getPatientDetails(hh_number).call()
+
+        # Structure the response
+        patient_data = {
+            "walletAddress": patient_details[0],
+            "name": patient_details[1],
+            "dateOfBirth": patient_details[2],
+            "gender": patient_details[3],
+            "bloodGroup": patient_details[4],
+            "homeAddress": patient_details[5],
+            "email": patient_details[6]
+        }
+
+        return jsonify({"status": "success", "patient_data": patient_data})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+
 @app.route('/register', methods=['POST'])
 def register_patient():
     data = request.get_json()
