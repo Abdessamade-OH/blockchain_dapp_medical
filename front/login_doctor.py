@@ -12,46 +12,38 @@ def login_doctor_to_backend(login_frame, app):
         "password": password_entry.get()
     }
 
-    print("Sending data to backend:", json.dumps(data, indent=4))
-
-    # Define the form type, this will be passed to validate_input
-    form_type = "doctor_login"
-
-    # Pass form_type to validate_input
-    errors = validate_input(data, form_type)
+    errors = validate_input(data, "doctor_login")
     if errors:
-        # Display validation errors if any
         for error in errors:
             error_label = customtkinter.CTkLabel(login_frame, text=error, text_color="red", bg_color="#EAF6F6")
             error_label.pack(pady=5)
         return
 
     try:
-        # Make POST request to backend
+        # Login request
         response = requests.post(LOGIN_URL, json=data)
-        
-        # Check response status
         if response.status_code == 200:
             result = response.json()
             if result.get("status") == "success":
-                show_message(login_frame, "Login successful", "green")
+                show_message(login_frame, "Login successful!", "green")
 
-                # Pass doctor info to the dashboard
-                doctor_info = result.get("data", {})
-                show_doctor_dashboard(app, doctor_info)  # Same dashboard as for patient
+                # Fetch doctor details
+                hh_number = data.get("hh_number")
+                doctor_details_url = f"http://127.0.0.1:5000/get_doctor_details?hh_number={hh_number}"
+                doctor_details_response = requests.get(doctor_details_url)
+
+                if doctor_details_response.status_code == 200:
+                    doctor_data = doctor_details_response.json().get("doctor_data", {})
+                    # Show doctor dashboard with fetched data
+                    show_doctor_dashboard(app, doctor_data)
+                else:
+                    show_message(login_frame, "Error fetching doctor details", "red")
             else:
                 show_message(login_frame, result.get("message", "Invalid credentials"), "red")
         else:
-            # Show error on UI and print to terminal
-            error_message = f"Error: {response.status_code} - {response.text}"
-            show_message(login_frame, error_message, "red")
-            print(f"Backend error: {error_message}")
-    
+            show_message(login_frame, "Error communicating with backend", "red")
     except requests.exceptions.RequestException as e:
-        # Log request exceptions (network issues, server down, etc.) to both terminal and UI
-        error_message = f"Request failed: {str(e)}"
-        show_message(login_frame, error_message, "red")
-        print(f"Request failed: {str(e)}")  # Print error to terminal
+        show_message(login_frame, f"Request failed: {str(e)}", "red")
 
 def show_login_doctor_page(app, auth_page_callback):
     # Clear the frame and set up the login page
