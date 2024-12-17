@@ -14,7 +14,7 @@ def login_patient_to_backend(login_frame, app):
     }
 
     # Pass 'patient' as the form_type to validate_input
-    errors = validate_input(data, "patient")
+    errors = validate_input(data, form_type="patient")
     if errors:
         for error in errors:
             error_label = customtkinter.CTkLabel(login_frame, text=error, text_color="red", bg_color="#EAF6F6")

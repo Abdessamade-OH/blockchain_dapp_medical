@@ -6,6 +6,7 @@ from utils import validate_input, show_message
 REGISTER_URL = "http://127.0.0.1:5000/register"
 
 def register_patient_to_backend(register_frame):
+    form_type = "patient" 
     data = {
         "name": name_entry.get(),
         "dob": dob_entry.get(),
@@ -17,7 +18,7 @@ def register_patient_to_backend(register_frame):
         "password": password_entry_reg.get()
     }
 
-    errors = validate_input(data)
+    errors = validate_input(data, form_type)
     if errors:
         for error in errors:
             error_label = customtkinter.CTkLabel(register_frame, text=error, text_color="red", bg_color="#EAF6F6")

@@ -146,6 +146,45 @@
 		"inputs": [
 			{
 				"internalType": "string",
+				"name": "_hhNumber",
+				"type": "string"
+			}
+		],
+		"name": "getDoctorDetails",
+		"outputs": [
+			{
+				"internalType": "address",
+				"name": "walletAddress",
+				"type": "address"
+			},
+			{
+				"internalType": "string",
+				"name": "name",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "specialization",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "hospitalName",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "hhNumber",
+				"type": "string"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
 				"name": "",
 				"type": "string"
 			}

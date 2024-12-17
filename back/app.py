@@ -26,7 +26,7 @@ with open('contract_patient_abi.json', 'r') as abi_file:
     contract_abi = json.load(abi_file)
 
 # Contract address (replace with your actual contract address from Ganache)
-contract_address = '0x973c5c85FADdd33FC29cdE75354accC49023568e'
+contract_address = '0xD1D17aCEADaa337A8fA0EE510c465D3A9Da40C9B'
 
 # Create contract instance
 patient_contract = w3.eth.contract(address=contract_address, abi=contract_abi)
@@ -37,13 +37,13 @@ with open('contract_doctor_abi.json', 'r') as abi_file:
     doctor_contract_abi = json.load(abi_file)
 
 # Contract address for the doctor contract (replace with actual address from Ganache)
-doctor_contract_address = '0xd8b934580fcE35a11B58C6D73aDeE468a2833fa8'
+doctor_contract_address = '0x97A2fAa43b2dA6d80DDDc250F4227a877d5671c0'
 
 # Create contract instance for the doctor contract
 doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)
 
 # Get the account from Ganache (the first account in the list, for example)
-account_address = w3.eth.accounts[0]
+account_address = w3.eth.accounts[6]
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -80,8 +80,46 @@ def get_patient_details():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# Route to fetch doctor details by hh_number
+@app.route('/get_doctor_details', methods=['GET'])
+def get_doctor_details():
+    hh_number = request.args.get('hh_number')
 
+    if not hh_number:
+        return jsonify({"error": "Missing hh_number parameter"}), 400
 
+    try:
+        # First check if the doctor is registered
+        is_registered = doctor_contract.functions.isDoctorRegistered(hh_number).call()
+        
+        if not is_registered:
+            return jsonify({
+                "status": "error",
+                "error": "Doctor not registered"
+            }), 404
+
+        # If registered, proceed to get details
+        doctor_details = doctor_contract.functions.getDoctorDetails(hh_number).call()
+
+        # Structure the response to match the actual contract return values
+        doctor_data = {
+            "walletAddress": doctor_details[0],
+            "name": doctor_details[1],
+            "specialization": doctor_details[2],
+            "hospitalName": doctor_details[3],  
+            "hhNumber": doctor_details[4]
+        }
+
+        return jsonify({
+            "status": "success",
+            "doctor_data": doctor_data
+        })
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": f"Failed to fetch doctor details: {str(e)}"
+        }), 500
 
 @app.route('/register', methods=['POST'])
 def register_patient():
@@ -170,25 +208,21 @@ def login_patient():
 def register_doctor_endpoint():
     data = request.get_json()
 
-    # Required fields for doctor registration
     required_fields = ['name', 'specialization', 'hospital_name', 'hh_number', 'password']
     if not all(field in data for field in required_fields):
         return jsonify({"error": "Missing required fields"}), 400
 
     try:
-        # Call the `register_doctor` function from connect_doctor.py
         response = register_doctor(
             name=data['name'],
             specialization=data['specialization'],
             hospital_name=data['hospital_name'],
             hh_number=data['hh_number'],
             password=data['password'],
-            private_key=private_key
+            private_key=private_key  # Make sure this matches the private key of the account you want to use
         )
 
-        # Process the response from `register_doctor`
         if response['status'] == 'success':
-            # Serialize the receipt for the response
             tx_receipt = response['receipt']
             serialized_receipt = {
                 "blockHash": tx_receipt.blockHash.hex(),
@@ -199,10 +233,8 @@ def register_doctor_endpoint():
                 "status": tx_receipt.status,
                 "transactionIndex": tx_receipt.transactionIndex
             }
-
             return jsonify({"status": "success", "transaction_receipt": serialized_receipt})
         else:
-            # Handle errors
             return jsonify({"error": response['message']}), 500
 
     except Exception as e:
@@ -219,14 +251,18 @@ def login_doctor():
         return jsonify({"error": "Missing required fields"}), 400
 
     try:
-        # Example of a state-modifying function, using .send_transaction() instead of .call()
+        # Get the address associated with the private key
+        account = w3.eth.account.from_key(private_key)
+        account_address = account.address
+
+        # Get the current nonce for the account
         nonce = w3.eth.get_transaction_count(account_address)
 
         transaction = doctor_contract.functions.validateDoctorLogin(
             data['hh_number'],  # Health number
             data['password']    # Password
         ).build_transaction({
-            'from': account_address,
+            'from': account_address,  # Using the address derived from private key
             'gas': 2000000,
             'gasPrice': w3.to_wei('20', 'gwei'),
             'nonce': nonce,
@@ -241,7 +277,7 @@ def login_doctor():
 
         return jsonify({
             "status": "success",
-            "transaction_hash": tx_hash.hex(),  # Convert HexBytes to string
+            "transaction_hash": tx_hash.hex(),
             "transaction_receipt": {
                 "blockHash": tx_receipt.blockHash.hex(),
                 "blockNumber": tx_receipt.blockNumber,

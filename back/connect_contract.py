@@ -9,14 +9,14 @@ with open('contract_patient_abi.json', 'r') as abi_file:
     contract_abi = json.load(abi_file)
 
 # Contract address (replace with your actual contract address from Ganache)
-contract_address = '0x973c5c85FADdd33FC29cdE75354accC49023568e'
+contract_address = '0xD1D17aCEADaa337A8fA0EE510c465D3A9Da40C9B'
 
 # Create contract instance
 patient_contract = w3.eth.contract(address=contract_address, abi=contract_abi)
 
 def register_patient(name, dob, gender, blood_group, address, email, hh_number, password, private_key):
     # Get the account from Ganache (the first account in the list, for example)
-    account_address = w3.eth.accounts[0]
+    account_address = w3.eth.accounts[6]
 
     # Set up a transaction to call the `registerPatient` function
     nonce = w3.eth.get_transaction_count(account_address)
