@@ -26,7 +26,7 @@ with open('contract_patient_abi.json', 'r') as abi_file:
     contract_abi = json.load(abi_file)
 
 # Contract address (replace with your actual contract address from Ganache)
-contract_address = '0xD1D17aCEADaa337A8fA0EE510c465D3A9Da40C9B'
+contract_address = '0x77BEB626ff16CfdFB8641FCe31612eCc1ccA1F4E'
 
 # Create contract instance
 patient_contract = w3.eth.contract(address=contract_address, abi=contract_abi)
@@ -72,7 +72,8 @@ def get_patient_details():
             "gender": patient_details[3],
             "bloodGroup": patient_details[4],
             "homeAddress": patient_details[5],
-            "email": patient_details[6]
+            "email": patient_details[6],
+            "hhNumber": patient_details[7]
         }
 
         return jsonify({"status": "success", "patient_data": patient_data})

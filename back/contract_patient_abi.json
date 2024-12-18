@@ -152,6 +152,11 @@
 				"internalType": "string",
 				"name": "email",
 				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "hhNumber",
+				"type": "string"
 			}
 		],
 		"stateMutability": "view",
