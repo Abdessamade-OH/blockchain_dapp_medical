@@ -83,11 +83,75 @@ def create_access_management_section(parent, patient_info):
     grant_button = customtkinter.CTkButton(
         access_frame, 
         text="Grant Access", 
-        command=lambda: grant_access(patient_info, doctor_hh_entry.get())
+        command=lambda: grant_access(patient_info, doctor_hh_entry.get(), table_frame)
     )
     grant_button.pack(side="left", padx=5)
 
-def grant_access(patient_info, doctor_hh_number):
+    # Table for displaying doctors with granted access
+    table_frame = customtkinter.CTkFrame(parent)
+    table_frame.pack(fill="x", padx=20, pady=20)
+
+    # Fetch and display doctors with access
+    refresh_access_table(patient_info, table_frame)
+
+def refresh_access_table(patient_info, table_frame):
+    # Clear existing table rows
+    for widget in table_frame.winfo_children():
+        widget.destroy()
+
+    # Fetch data
+    doctors = fetch_patient_doctors(patient_info.get("hhNumber"))
+
+    if not doctors:
+        no_data_label = customtkinter.CTkLabel(table_frame, text="No doctors with access.", font=("Arial", 14))
+        no_data_label.pack(pady=10)
+        return
+
+    # Table headers
+    header_row = customtkinter.CTkFrame(table_frame)
+    header_row.pack(fill="x", pady=5)
+    headers = ["Name", "HH Number", "Actions"]
+    for header in headers:
+        customtkinter.CTkLabel(header_row, text=header, width=200, anchor="w", font=("Arial", 14, "bold")).pack(side="left", padx=5)
+
+    # Table rows
+    for doctor in doctors:
+        row_frame = customtkinter.CTkFrame(table_frame)
+        row_frame.pack(fill="x", pady=5)
+
+        customtkinter.CTkLabel(row_frame, text=doctor["name"], width=200, anchor="w").pack(side="left", padx=5)
+        customtkinter.CTkLabel(row_frame, text=doctor["hhNumber"], width=200, anchor="w").pack(side="left", padx=5)
+
+        # Revoke Button
+        revoke_button = customtkinter.CTkButton(
+            row_frame, 
+            text="Revoke", 
+            command=lambda d=doctor["hhNumber"]: revoke_access(patient_info, d, table_frame)
+        )
+        revoke_button.pack(side="left", padx=5)
+
+def revoke_access(patient_info, doctor_hh_number, table_frame):
+    if not doctor_hh_number:
+        print("Doctor HH Number is required.")
+        return
+
+    url = "http://127.0.0.1:5000/revoke_doctor_access"
+    payload = {
+        "patient_hh_number": patient_info.get("hhNumber"),
+        "doctor_hh_number": doctor_hh_number
+    }
+
+    try:
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            print("Access revoked successfully!")
+            refresh_access_table(patient_info, table_frame)  # Refresh the table
+        else:
+            print(f"Failed to revoke access: {response.json().get('error', 'Unknown error')}")
+    except Exception as e:
+        print(f"Error revoking access: {e}")
+
+def grant_access(patient_info, doctor_hh_number, table_frame):
     if not doctor_hh_number:
         print("Doctor HH Number is required.")
         return
@@ -104,7 +168,28 @@ def grant_access(patient_info, doctor_hh_number):
         response = requests.post(url, json=payload)
         if response.status_code == 200:
             print("Access granted successfully!")
+            refresh_access_table(patient_info, table_frame)  # Refresh the table
         else:
             print(f"Failed to grant access: {response.json().get('error', 'Unknown error')}")
     except Exception as e:
         print(f"Error granting access: {e}")
+
+def fetch_patient_doctors(patient_hh_number):
+    if not patient_hh_number:
+        print("Patient HH Number is required to fetch doctors.")
+        return []
+
+    url = f"http://127.0.0.1:5000/get_patient_doctors"
+    params = {"patient_hh_number": patient_hh_number}
+
+    try:
+        response = requests.get(url, params=params)
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("doctors", [])
+        else:
+            print(f"Failed to fetch doctors: {response.json().get('error', 'Unknown error')}")
+            return []
+    except Exception as e:
+        print(f"Error fetching doctors: {e}")
+        return []

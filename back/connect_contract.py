@@ -9,7 +9,7 @@ with open('contract_patient_abi.json', 'r') as abi_file:
     contract_abi = json.load(abi_file)
 
 # Contract address (replace with your actual contract address from Ganache)
-contract_address = '0x77BEB626ff16CfdFB8641FCe31612eCc1ccA1F4E'
+contract_address = '0x7F0005f4D39E4B8Bd987fa777856AaAcd5FB91d4'
 
 # Create contract instance
 patient_contract = w3.eth.contract(address=contract_address, abi=contract_abi)

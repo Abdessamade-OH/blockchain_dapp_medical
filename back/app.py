@@ -26,7 +26,7 @@ with open('contract_patient_abi.json', 'r') as abi_file:
     contract_abi = json.load(abi_file)
 
 # Contract address (replace with your actual contract address from Ganache)
-contract_address = '0x77BEB626ff16CfdFB8641FCe31612eCc1ccA1F4E'
+contract_address = '0x7F0005f4D39E4B8Bd987fa777856AaAcd5FB91d4'
 
 # Create contract instance
 patient_contract = w3.eth.contract(address=contract_address, abi=contract_abi)
@@ -37,19 +37,18 @@ with open('contract_doctor_abi.json', 'r') as abi_file:
     doctor_contract_abi = json.load(abi_file)
 
 # Contract address for the doctor contract (replace with actual address from Ganache)
-doctor_contract_address = '0x38cD50DC3959b0dDBDcc997923D22F0A08F087c3'
+doctor_contract_address = '0x008E79103fd4cF33908e29Ddef468b28f92dBe9d'
 
 # Create contract instance for the doctor contract
 doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)
 
 # Get the account from Ganache (the first account in the list, for example)
-account_address = w3.eth.accounts[6]
+account_address = w3.eth.accounts[0]
 
 # Initialize Flask app
 app = Flask(__name__)
 
 CORS(app)  # Enable CORS for all routes
-
 
 
 # Route to fetch patient details by hh_number
@@ -178,7 +177,6 @@ def register_patient():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/login', methods=['POST'])
 def login_patient():
     data = request.get_json()
@@ -202,8 +200,6 @@ def login_patient():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
 
 @app.route('/register_doctor', methods=['POST'])
 def register_doctor_endpoint():
@@ -240,7 +236,6 @@ def register_doctor_endpoint():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 @app.route('/login_doctor', methods=['POST'])
 def login_doctor():
