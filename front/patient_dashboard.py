@@ -1,5 +1,5 @@
-# patient_dashboard.py
 import customtkinter
+import requests
 
 def show_patient_dashboard(app, patient_info):
     # Clear the current screen
@@ -40,7 +40,7 @@ def show_patient_dashboard(app, patient_info):
 
     # Access Management Tab
     access_management_tab = tab_view.add("Access Management")
-    create_access_management_section(access_management_tab)
+    create_access_management_section(access_management_tab, patient_info)
 
 def create_personal_info_section(parent, patient_info):
     info_frame = customtkinter.CTkFrame(parent)
@@ -68,6 +68,43 @@ def create_medical_records_section(parent):
     label = customtkinter.CTkLabel(parent, text="Medical Records - Coming Soon!", font=("Arial", 16))
     label.pack(pady=20)
 
-def create_access_management_section(parent):
-    label = customtkinter.CTkLabel(parent, text="Access Management - Coming Soon!", font=("Arial", 16))
-    label.pack(pady=20)
+def create_access_management_section(parent, patient_info):
+    access_frame = customtkinter.CTkFrame(parent)
+    access_frame.pack(fill="x", padx=20, pady=20)
+
+    # Input field for Doctor HH number
+    input_label = customtkinter.CTkLabel(access_frame, text="Doctor HH Number:")
+    input_label.pack(side="left", padx=5)
+    
+    doctor_hh_entry = customtkinter.CTkEntry(access_frame, width=200)
+    doctor_hh_entry.pack(side="left", padx=5)
+
+    # Grant Access Button
+    grant_button = customtkinter.CTkButton(
+        access_frame, 
+        text="Grant Access", 
+        command=lambda: grant_access(patient_info, doctor_hh_entry.get())
+    )
+    grant_button.pack(side="left", padx=5)
+
+def grant_access(patient_info, doctor_hh_number):
+    if not doctor_hh_number:
+        print("Doctor HH Number is required.")
+        return
+
+    url = "http://127.0.0.1:5000/grant_doctor_access"
+    payload = {
+        "patient_hh_number": patient_info.get("hhNumber"),
+        "doctor_hh_number": doctor_hh_number
+    }
+
+    print(payload)
+
+    try:
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            print("Access granted successfully!")
+        else:
+            print(f"Failed to grant access: {response.json().get('error', 'Unknown error')}")
+    except Exception as e:
+        print(f"Error granting access: {e}")
