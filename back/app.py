@@ -292,6 +292,145 @@ def login_doctor():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/grant_doctor_access', methods=['POST'])
+def grant_doctor_access():
+    data = request.get_json()
+    
+    # Validate the required fields
+    required_fields = ['patient_hh_number', 'doctor_hh_number']
+    if not all(field in data for field in required_fields):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        # First verify if the doctor exists
+        is_doctor_registered = doctor_contract.functions.isDoctorRegistered(data['doctor_hh_number']).call()
+        if not is_doctor_registered:
+            return jsonify({"error": "Doctor not registered"}), 404
+
+        # Get the account from the private key
+        account = w3.eth.account.from_key(private_key)
+        account_address = account.address
+
+        # Get the current nonce
+        nonce = w3.eth.get_transaction_count(account_address)
+
+        # Prepare the transaction
+        transaction = doctor_contract.functions.grantPatientAccess(
+            data['patient_hh_number'],
+            data['doctor_hh_number']
+        ).build_transaction({
+            'from': account_address,
+            'gas': 2000000,
+            'gasPrice': w3.to_wei('20', 'gwei'),
+            'nonce': nonce,
+        })
+
+        # Sign the transaction
+        signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
+
+        # Send the signed transaction
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+        return jsonify({
+            "status": "success",
+            "message": "Access granted successfully",
+            "transaction_hash": tx_hash.hex(),
+            "transaction_receipt": {
+                "blockHash": tx_receipt.blockHash.hex(),
+                "blockNumber": tx_receipt.blockNumber,
+                "contractAddress": tx_receipt.contractAddress,
+                "cumulativeGasUsed": tx_receipt.cumulativeGasUsed,
+                "gasUsed": tx_receipt.gasUsed,
+                "status": tx_receipt.status,
+                "transactionIndex": tx_receipt.transactionIndex
+            }
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/revoke_doctor_access', methods=['POST'])
+def revoke_doctor_access():
+    data = request.get_json()
+    
+    # Validate the required fields
+    required_fields = ['patient_hh_number', 'doctor_hh_number']
+    if not all(field in data for field in required_fields):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        # First verify if the doctor exists
+        is_doctor_registered = doctor_contract.functions.isDoctorRegistered(data['doctor_hh_number']).call()
+        if not is_doctor_registered:
+            return jsonify({"error": "Doctor not registered"}), 404
+
+        # Get the account from the private key
+        account = w3.eth.account.from_key(private_key)
+        account_address = account.address
+
+        # Get the current nonce
+        nonce = w3.eth.get_transaction_count(account_address)
+
+        # Prepare the transaction
+        transaction = doctor_contract.functions.revokePatientAccess(
+            data['patient_hh_number'],
+            data['doctor_hh_number']
+        ).build_transaction({
+            'from': account_address,
+            'gas': 2000000,
+            'gasPrice': w3.to_wei('20', 'gwei'),
+            'nonce': nonce,
+        })
+
+        # Sign the transaction
+        signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
+
+        # Send the signed transaction
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+        return jsonify({
+            "status": "success",
+            "message": "Access revoked successfully",
+            "transaction_hash": tx_hash.hex(),
+            "transaction_receipt": {
+                "blockHash": tx_receipt.blockHash.hex(),
+                "blockNumber": tx_receipt.blockNumber,
+                "contractAddress": tx_receipt.contractAddress,
+                "cumulativeGasUsed": tx_receipt.cumulativeGasUsed,
+                "gasUsed": tx_receipt.gasUsed,
+                "status": tx_receipt.status,
+                "transactionIndex": tx_receipt.transactionIndex
+            }
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/check_doctor_access', methods=['GET'])
+def check_doctor_access():
+    patient_hh_number = request.args.get('patient_hh_number')
+    doctor_hh_number = request.args.get('doctor_hh_number')
+
+    if not patient_hh_number or not doctor_hh_number:
+        return jsonify({"error": "Missing required parameters"}), 400
+
+    try:
+        # Call the smart contract function to check access
+        has_access = doctor_contract.functions.checkPatientAccess(
+            patient_hh_number,
+            doctor_hh_number
+        ).call()
+
+        return jsonify({
+            "status": "success",
+            "has_access": has_access
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # Run the Flask app
 if __name__ == '__main__':
     app.run(debug=True)
