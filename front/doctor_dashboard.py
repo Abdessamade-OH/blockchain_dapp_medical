@@ -1,7 +1,132 @@
-# doctor_dashboard.py
 import customtkinter as ctk
 import requests
+from tkinter import filedialog
 from utils import show_message
+import os
+from cryptography.fernet import Fernet
+import ipfsapi
+
+def add_medical_records_section(parent, doctor_info):
+    records_frame = ctk.CTkFrame(parent)
+    records_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+    # Patient HH Number Entry
+    patient_hh_frame = ctk.CTkFrame(records_frame)
+    patient_hh_frame.pack(fill="x", pady=10)
+
+    patient_hh_entry = ctk.CTkEntry(
+        patient_hh_frame,
+        placeholder_text="Patient HH Number",
+        width=300
+    )
+    patient_hh_entry.pack(side="left", padx=10)
+
+    # File Selection
+    file_frame = ctk.CTkFrame(records_frame)
+    file_frame.pack(fill="x", pady=10)
+
+    selected_file_label = ctk.CTkLabel(
+        file_frame, 
+        text="No file selected", 
+        width=300
+    )
+    selected_file_label.pack(side="left", padx=10)
+
+    selected_file = {}  # Use a dictionary to store file path
+
+    def select_medical_record_file():
+        file_types = [
+            ('PDF files', '*.pdf'),
+            ('Image files', '*.jpg;*.jpeg;*.png'),
+            ('Text files', '*.txt'),
+            ('All files', '*.*')
+        ]
+        
+        filename = filedialog.askopenfilename(
+            title="Select Medical Record File",
+            filetypes=file_types
+        )
+        
+        if filename:
+            selected_file['path'] = filename
+            selected_file_label.configure(
+                text=os.path.basename(filename)
+            )
+
+    select_file_btn = ctk.CTkButton(
+        file_frame,
+        text="Select Medical Record File",
+        command=select_medical_record_file
+    )
+    select_file_btn.pack(side="left", padx=10)
+
+    # Create Medical Record Button
+    def create_medical_record():
+        try:
+            patient_hh = patient_hh_entry.get()
+            if not patient_hh:
+                show_message("Error", "Please enter patient HH number")
+                return
+            
+            if 'path' not in selected_file:
+                show_message("Error", "Please select a file")
+                return
+            
+            # Connect to local IPFS daemon
+            # Make sure you have IPFS daemon running locally
+            ipfs_client = ipfsapi.connect('127.0.0.1', 5001)
+            
+            # Generate symmetric encryption key
+            symmetric_key = Fernet.generate_key()
+            fernet = Fernet(symmetric_key)
+            
+            # Read and encrypt file
+            with open(selected_file['path'], 'rb') as file:
+                file_data = file.read()
+            
+            encrypted_data = fernet.encrypt(file_data)
+            
+            # Upload encrypted file to IPFS
+            temp_encrypted_file = 'temp_encrypted_file'
+            with open(temp_encrypted_file, 'wb') as temp_file:
+                temp_file.write(encrypted_data)
+            
+            # Add file to IPFS
+            ipfs_result = ipfs_client.add(temp_encrypted_file)
+            ipfs_hash = ipfs_result['Hash']
+            
+            # Cleanup temporary file
+            os.remove(temp_encrypted_file)
+            
+            # Send to backend
+            data = {
+                "patient_hh": patient_hh,
+                "ipfs_hash": ipfs_hash,
+                "encrypted_key": symmetric_key.decode('utf-8'),
+                "doctor_hh": doctor_info['hhNumber'],
+                "filename": os.path.basename(selected_file['path'])
+            }
+            
+            response = requests.post("http://127.0.0.1:5000/create_medical_record", json=data)
+            
+            if response.status_code == 200:
+                show_message("Success", "Medical record created successfully")
+                # Reset file selection
+                selected_file_label.configure(text="No file selected")
+                if 'path' in selected_file:
+                    del selected_file['path']
+            else:
+                show_message("Error", "Failed to create medical record")
+        
+        except Exception as e:
+            show_message("Error", str(e))
+
+    create_record_btn = ctk.CTkButton(
+        records_frame,
+        text="Create Medical Record",
+        command=create_medical_record
+    )
+    create_record_btn.pack(pady=10)
 
 def show_doctor_dashboard(app, doctor_info):
     # Clear the current screen
@@ -40,10 +165,15 @@ def show_doctor_dashboard(app, doctor_info):
     patient_records_tab = tab_view.add("Patient Records")
     create_patient_records_section(patient_records_tab)
 
+    # Medical Records Tab
+    medical_records_tab = tab_view.add("Medical Records")
+    add_medical_records_section(medical_records_tab, doctor_info)
+
     # Access Management Tab
     access_management_tab = tab_view.add("Access Management")
     create_access_management_section(access_management_tab, doctor_info)
 
+# Rest of the existing code remains the same...
 def create_personal_info_section(parent, doctor_info):
     info_frame = ctk.CTkFrame(parent)
     info_frame.pack(fill="both", expand=True, padx=20, pady=20)

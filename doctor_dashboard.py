@@ -9,7 +9,7 @@ import os
 
 # Additional imports for file handling and encryption
 from cryptography.fernet import Fernet
-# import pinata
+import pinata
 
 class DoctorDashboard:
     def __init__(self, root, doctor_info):
@@ -19,7 +19,7 @@ class DoctorDashboard:
         # IPFS and encryption setup
         self.pinata_api_key = 'YOUR_PINATA_API_KEY'
         self.pinata_secret_api_key = 'YOUR_PINATA_SECRET_API_KEY'
-        # self.pinata_client = pinata.Pinata(self.pinata_api_key, self.pinata_secret_api_key)
+        self.pinata_client = pinata.Pinata(self.pinata_api_key, self.pinata_secret_api_key)
         
         # Create main dashboard frame
         self.dashboard_frame = ctk.CTkFrame(self.root)
