@@ -26,7 +26,7 @@ with open('contract_patient_abi.json', 'r') as abi_file:
     contract_abi = json.load(abi_file)
 
 # Contract address (replace with your actual contract address from Ganache)
-contract_address = '0x7F0005f4D39E4B8Bd987fa777856AaAcd5FB91d4'
+contract_address = '0x51E64eab866e1287490ceFeA9111a8207796C776'
 
 # Create contract instance
 patient_contract = w3.eth.contract(address=contract_address, abi=contract_abi)
@@ -37,7 +37,7 @@ with open('contract_doctor_abi.json', 'r') as abi_file:
     doctor_contract_abi = json.load(abi_file)
 
 # Contract address for the doctor contract (replace with actual address from Ganache)
-doctor_contract_address = '0x008E79103fd4cF33908e29Ddef468b28f92dBe9d'
+doctor_contract_address = '0xbA4891B3e0034a546668434C5bECf13B1B2cd11b'
 
 # Create contract instance for the doctor contract
 doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)
@@ -458,6 +458,92 @@ def get_patient_doctors():
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/updatePatientInfo', methods=['POST'])
+def update_patient_info():
+    data = request.json
+    hh_number = data.get('hhNumber')
+    home_address = data.get('homeAddress')
+    email = data.get('email')
+
+    if not hh_number or not home_address or not email:
+        return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
+
+    try:
+        # Get the account from the private key
+        account = w3.eth.account.from_key(private_key)
+        account_address = account.address
+
+        # Get the current nonce
+        nonce = w3.eth.get_transaction_count(account_address)
+
+        # Prepare the transaction with the sender's address
+        transaction = patient_contract.functions.updatePatientInfo(
+            hh_number,
+            home_address,
+            email
+        ).build_transaction({
+            'from': account_address,  # Explicitly set the sender
+            'gas': 2000000,
+            'gasPrice': w3.to_wei('20', 'gwei'),
+            'nonce': nonce,
+        })
+
+        # Sign the transaction
+        signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
+
+        # Send the signed transaction
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+
+        # Wait for transaction receipt
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        return jsonify({'status': 'success', 'transactionHash': tx_hash.hex()}), 200
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+@app.route('/updateDoctorInfo', methods=['POST'])
+def update_doctor_info():
+    data = request.json
+    hh_number = data.get('hhNumber')
+    specialization = data.get('specialization')
+    hospital_name = data.get('hospitalName')
+
+    if not hh_number or not specialization or not hospital_name:
+        return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
+
+    try:
+        # Get the account from the private key
+        account = w3.eth.account.from_key(private_key)
+        account_address = account.address
+
+        # Get the current nonce
+        nonce = w3.eth.get_transaction_count(account_address)
+
+        # Prepare the transaction with the sender's address
+        transaction = doctor_contract.functions.updateDoctorInfo(
+            hh_number,
+            specialization,
+            hospital_name
+        ).build_transaction({
+            'from': account_address,  # Explicitly set the sender
+            'gas': 2000000,
+            'gasPrice': w3.to_wei('20', 'gwei'),
+            'nonce': nonce,
+        })
+
+        # Sign the transaction
+        signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
+
+        # Send the signed transaction
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+
+        # Wait for transaction receipt
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        return jsonify({'status': 'success', 'transactionHash': tx_hash.hex()}), 200
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
 
 # Run the Flask app
 if __name__ == '__main__':

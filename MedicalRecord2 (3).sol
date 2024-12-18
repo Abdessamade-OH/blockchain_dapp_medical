@@ -160,6 +160,18 @@ contract ContractDoctor {
         emit DoctorRegistered(_hhNumber, _name, msg.sender);
     }
 
+        function updateDoctorInfo(
+        string memory _hhNumber,
+        string memory _specialization,
+        string memory _hospitalName
+            ) external {
+                require(isDoctorRegistered[_hhNumber], "Doctor not registered");
+                require(doctors[_hhNumber].walletAddress == msg.sender, "Unauthorized access");
+
+                doctors[_hhNumber].specialization = _specialization;
+                doctors[_hhNumber].hospitalName = _hospitalName;
+            }
+
     // Validate doctor login
     function validateDoctorLogin(string memory _hhNumber, string memory _password) 
         external 

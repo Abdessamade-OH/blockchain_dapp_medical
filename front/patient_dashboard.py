@@ -1,3 +1,4 @@
+from tkinter import messagebox
 import customtkinter
 import requests
 
@@ -46,7 +47,7 @@ def create_personal_info_section(parent, patient_info):
     info_frame = customtkinter.CTkFrame(parent)
     info_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-    # Display personal info
+    # Display current personal info and allow editing
     info_labels = [
         ("Wallet Address", patient_info.get("walletAddress", "N/A")),
         ("Name", patient_info.get("name", "N/A")),
@@ -58,11 +59,66 @@ def create_personal_info_section(parent, patient_info):
         ("Health Number", patient_info.get("hhNumber", "N/A"))
     ]
 
+    # Create labels for static info
     for label, value in info_labels:
         row = customtkinter.CTkFrame(info_frame)
         row.pack(fill="x", pady=5)
         customtkinter.CTkLabel(row, text=f"{label}:", anchor="w").pack(side="left", padx=5)
         customtkinter.CTkLabel(row, text=value, anchor="w").pack(side="left", padx=5)
+
+    # Fields for editable information (home address and email)
+    row_home_address = customtkinter.CTkFrame(info_frame)
+    row_home_address.pack(fill="x", pady=5)
+    customtkinter.CTkLabel(row_home_address, text="Home Address:", anchor="w").pack(side="left", padx=5)
+    home_address_entry = customtkinter.CTkEntry(row_home_address)
+    home_address_entry.insert(0, patient_info.get("homeAddress", ""))
+    home_address_entry.pack(side="left", padx=5)
+
+    row_email = customtkinter.CTkFrame(info_frame)
+    row_email.pack(fill="x", pady=5)
+    customtkinter.CTkLabel(row_email, text="Email:", anchor="w").pack(side="left", padx=5)
+    email_entry = customtkinter.CTkEntry(row_email)
+    email_entry.insert(0, patient_info.get("email", ""))
+    email_entry.pack(side="left", padx=5)
+
+    # Function to handle the update
+    def update_patient_info():
+        # Get the updated values
+        new_home_address = home_address_entry.get()
+        new_email = email_entry.get()
+        hh_number = patient_info.get("hhNumber")
+
+        if not new_home_address or not new_email:
+            messagebox.showerror("Error", "Please fill in both the home address and email fields.")
+            return
+
+        # Make a POST request to update the information
+        url = "http://localhost:5000/updatePatientInfo"  # Adjust based on your backend URL
+        payload = {
+            "hhNumber": hh_number,
+            "homeAddress": new_home_address,
+            "email": new_email
+        }
+
+        try:
+            response = requests.post(url, json=payload)
+            data = response.json()
+
+            if response.status_code == 200 and data.get("status") == "success":
+                messagebox.showinfo("Success", "Patient information updated successfully.")
+                # Update the displayed information with the new values
+                patient_info["homeAddress"] = new_home_address
+                patient_info["email"] = new_email
+                # Refresh the UI with the updated information
+                #create_personal_info_section(parent, patient_info)
+            else:
+                messagebox.showerror("Error", data.get("message", "Failed to update information"))
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+
+    # Button to trigger the update
+    update_button = customtkinter.CTkButton(info_frame, text="Update Info", command=update_patient_info)
+    update_button.pack(pady=20)
 
 def create_medical_records_section(parent):
     label = customtkinter.CTkLabel(parent, text="Medical Records - Coming Soon!", font=("Arial", 16))

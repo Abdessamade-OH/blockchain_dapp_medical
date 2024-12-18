@@ -128,6 +128,7 @@ def add_medical_records_section(parent, doctor_info):
     )
     create_record_btn.pack(pady=10)
 
+
 def show_doctor_dashboard(app, doctor_info):
     # Clear the current screen
     for widget in app.winfo_children():
@@ -159,7 +160,7 @@ def show_doctor_dashboard(app, doctor_info):
 
     # Personal Info Tab
     personal_info_tab = tab_view.add("Personal Info")
-    create_personal_info_section(personal_info_tab, doctor_info)
+    create_doctor_info_section(personal_info_tab, doctor_info)
 
     # Patient Records Tab
     patient_records_tab = tab_view.add("Patient Records")
@@ -173,12 +174,13 @@ def show_doctor_dashboard(app, doctor_info):
     access_management_tab = tab_view.add("Access Management")
     create_access_management_section(access_management_tab, doctor_info)
 
-# Rest of the existing code remains the same...
-def create_personal_info_section(parent, doctor_info):
+from tkinter import messagebox
+
+def create_doctor_info_section(parent, doctor_info):
     info_frame = ctk.CTkFrame(parent)
     info_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-    # Display doctor info
+    # Display doctor info and allow editing
     info_labels = [
         ("Wallet Address", doctor_info.get("walletAddress", "N/A")),
         ("Name", doctor_info.get("name", "N/A")),
@@ -187,11 +189,68 @@ def create_personal_info_section(parent, doctor_info):
         ("Health Number", doctor_info.get("hhNumber", "N/A"))
     ]
 
+    # Create labels for static info (don't show wallet address)
     for label, value in info_labels:
-        row = ctk.CTkFrame(info_frame)
-        row.pack(fill="x", pady=5)
-        ctk.CTkLabel(row, text=f"{label}:", anchor="w").pack(side="left", padx=5)
-        ctk.CTkLabel(row, text=value, anchor="w").pack(side="left", padx=5)
+        if label != "Wallet Address":  # Hide wallet address
+            row = ctk.CTkFrame(info_frame)
+            row.pack(fill="x", pady=5)
+            ctk.CTkLabel(row, text=f"{label}:", anchor="w").pack(side="left", padx=5)
+            ctk.CTkLabel(row, text=value, anchor="w").pack(side="left", padx=5)
+
+    # Fields for editable information (specialization and hospital)
+    row_specialization = ctk.CTkFrame(info_frame)
+    row_specialization.pack(fill="x", pady=5)
+    ctk.CTkLabel(row_specialization, text="Specialization:", anchor="w").pack(side="left", padx=5)
+    specialization_entry = ctk.CTkEntry(row_specialization)
+    specialization_entry.insert(0, doctor_info.get("specialization", ""))
+    specialization_entry.pack(side="left", padx=5)
+
+    row_hospital = ctk.CTkFrame(info_frame)
+    row_hospital.pack(fill="x", pady=5)
+    ctk.CTkLabel(row_hospital, text="Hospital:", anchor="w").pack(side="left", padx=5)
+    hospital_entry = ctk.CTkEntry(row_hospital)
+    hospital_entry.insert(0, doctor_info.get("hospitalName", ""))
+    hospital_entry.pack(side="left", padx=5)
+
+    # Function to handle the update
+    def update_doctor_info():
+        # Get the updated values
+        new_specialization = specialization_entry.get()
+        new_hospital = hospital_entry.get()
+        hh_number = doctor_info.get("hhNumber")
+
+        if not new_specialization or not new_hospital:
+            messagebox.showerror("Error", "Please fill in both specialization and hospital fields.")
+            return
+
+        # Make a POST request to update the information
+        url = "http://localhost:5000/updateDoctorInfo"  # Adjust based on your backend URL
+        payload = {
+            "hhNumber": hh_number,
+            "specialization": new_specialization,
+            "hospitalName": new_hospital
+        }
+
+        try:
+            response = requests.post(url, json=payload)
+            data = response.json()
+
+            if response.status_code == 200 and data.get("status") == "success":
+                messagebox.showinfo("Success", "Doctor information updated successfully.")
+                # Update the displayed information with the new values
+                doctor_info["specialization"] = new_specialization
+                doctor_info["hospitalName"] = new_hospital
+                # Refresh the UI with the updated information
+                #create_doctor_info_section(parent, doctor_info)
+            else:
+                messagebox.showerror("Error", data.get("message", "Failed to update information"))
+        except Exception as e:
+            messagebox.showerror("Error", f"An error occurred: {str(e)}")
+
+    # Button to trigger the update
+    update_button = ctk.CTkButton(info_frame, text="Update Info", command=update_doctor_info)
+    update_button.pack(pady=20)
+
 
 def create_patient_records_section(parent):
     records_frame = ctk.CTkFrame(parent)
