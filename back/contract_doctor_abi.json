@@ -185,6 +185,25 @@
 		"inputs": [
 			{
 				"internalType": "string",
+				"name": "_patientHhNumber",
+				"type": "string"
+			}
+		],
+		"name": "getDoctorsWithAccess",
+		"outputs": [
+			{
+				"internalType": "string[]",
+				"name": "doctorHhNumbers",
+				"type": "string[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
 				"name": "",
 				"type": "string"
 			}

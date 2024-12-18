@@ -37,7 +37,7 @@ with open('contract_doctor_abi.json', 'r') as abi_file:
     doctor_contract_abi = json.load(abi_file)
 
 # Contract address for the doctor contract (replace with actual address from Ganache)
-doctor_contract_address = '0x97A2fAa43b2dA6d80DDDc250F4227a877d5671c0'
+doctor_contract_address = '0x38cD50DC3959b0dDBDcc997923D22F0A08F087c3'
 
 # Create contract instance for the doctor contract
 doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)
@@ -428,6 +428,38 @@ def check_doctor_access():
             "has_access": has_access
         })
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@app.route('/get_patient_doctors', methods=['GET'])
+def get_patient_doctors():
+    patient_hh_number = request.args.get('patient_hh_number')
+    
+    if not patient_hh_number:
+        return jsonify({"error": "Missing patient_hh_number parameter"}), 400
+        
+    try:
+        # Get all doctor HH numbers with access
+        doctor_hh_numbers = doctor_contract.functions.getDoctorsWithAccess(patient_hh_number).call()
+        
+        # Get details for each doctor
+        doctors_details = []
+        for hh_number in doctor_hh_numbers:
+            doctor_details = doctor_contract.functions.getDoctorDetails(hh_number).call()
+            doctors_details.append({
+                "walletAddress": doctor_details[0],
+                "name": doctor_details[1],
+                "specialization": doctor_details[2],
+                "hospitalName": doctor_details[3],
+                "hhNumber": doctor_details[4]
+            })
+        
+        return jsonify({
+            "status": "success",
+            "patient_hh_number": patient_hh_number,
+            "doctors": doctors_details
+        })
+        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
