@@ -62,75 +62,6 @@
 				"type": "string"
 			}
 		],
-		"name": "grantPatientAccess",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "string",
-				"name": "_name",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_specialization",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_hospitalName",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_hhNumber",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_password",
-				"type": "string"
-			}
-		],
-		"name": "registerDoctor",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "string",
-				"name": "_patientHhNumber",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_doctorHhNumber",
-				"type": "string"
-			}
-		],
-		"name": "revokePatientAccess",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "string",
-				"name": "_patientHhNumber",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_doctorHhNumber",
-				"type": "string"
-			}
-		],
 		"name": "checkPatientAccess",
 		"outputs": [
 			{
@@ -204,6 +135,24 @@
 		"inputs": [
 			{
 				"internalType": "string",
+				"name": "_patientHhNumber",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_doctorHhNumber",
+				"type": "string"
+			}
+		],
+		"name": "grantPatientAccess",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
 				"name": "",
 				"type": "string"
 			}
@@ -217,6 +166,80 @@
 			}
 		],
 		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_name",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_specialization",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_hospitalName",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_hhNumber",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_password",
+				"type": "string"
+			}
+		],
+		"name": "registerDoctor",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_patientHhNumber",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_doctorHhNumber",
+				"type": "string"
+			}
+		],
+		"name": "revokePatientAccess",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_hhNumber",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_specialization",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_hospitalName",
+				"type": "string"
+			}
+		],
+		"name": "updateDoctorInfo",
+		"outputs": [],
+		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{
