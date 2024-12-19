@@ -75,7 +75,7 @@ with open('contract_doctor_abi.json', 'r') as abi_file:
     doctor_contract_abi = json.load(abi_file)
 
 # Contract address for the doctor contract (replace with actual address from Ganache)
-doctor_contract_address = '0xE29244A44e40693e6F9b63629B640F608D3dB38d'
+doctor_contract_address = '0x9AA490223Bb9569e73bf3218aDA69c52F4d34a40'
 
 # Create contract instance for the doctor contract
 doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)
@@ -755,6 +755,50 @@ def get_medical_record_file():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# Add this new route to your Flask backend (paste.txt)
+@app.route('/get_patient_own_records', methods=['GET'])
+def get_patient_own_records():
+    try:
+        patient_hh_number = request.args.get('patient_hh_number')
+
+        if not patient_hh_number:
+            return jsonify({"error": "Missing patient_hh_number parameter"}), 400
+
+        # Get medical records directly without doctor authentication
+        records = doctor_contract.functions.getPatientAllMedicalRecords(
+            patient_hh_number
+        ).call()
+
+        # Process and decrypt records
+        processed_records = []
+        for record in records:
+            try:
+                # Decrypt the metadata
+                encrypted_metadata = base64.b64decode(record[4])  # record[4] is encryptedData
+                decrypted_metadata = fernet.decrypt(encrypted_metadata)
+                metadata = json.loads(decrypted_metadata.decode())
+
+                processed_record = {
+                    "record_hash": record[2],  # recordHash
+                    "notes": record[3],        # notes
+                    "timestamp": record[5],     # timestamp
+                    "filename": metadata.get("filename"),
+                    "content_type": metadata.get("content_type"),
+                    "ipfs_hash": metadata.get("ipfs_hash")
+                }
+                processed_records.append(processed_record)
+            except Exception as e:
+                print(f"Error processing record: {e}")
+                continue
+
+        return jsonify({
+            "status": "success",
+            "records": processed_records
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 # Run the Flask app
 if __name__ == '__main__':
     app.run(debug=True)

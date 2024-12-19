@@ -386,6 +386,62 @@
 				"internalType": "string",
 				"name": "_patientHhNumber",
 				"type": "string"
+			}
+		],
+		"name": "getPatientAllMedicalRecords",
+		"outputs": [
+			{
+				"components": [
+					{
+						"internalType": "string",
+						"name": "patientHhNumber",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "doctorHhNumber",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "recordHash",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "notes",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "encryptedData",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "timestamp",
+						"type": "uint256"
+					},
+					{
+						"internalType": "bool",
+						"name": "isDeleted",
+						"type": "bool"
+					}
+				],
+				"internalType": "struct ContractDoctor.MedicalRecord[]",
+				"name": "",
+				"type": "tuple[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_patientHhNumber",
+				"type": "string"
 			},
 			{
 				"internalType": "string",
