@@ -36,10 +36,15 @@ def login_patient_to_backend(login_frame, app):
 
                 if patient_details_response.status_code == 200:
                     patient_data = patient_details_response.json().get("patient_data", {})
+                    if not patient_data.get("hhNumber"):
+                        print("Error: Patient data does not contain hhNumber.")
+                    else:
+                        print(f"Patient data retrieved successfully: {patient_data}")
                     # Pass patient info to the dashboard
                     show_patient_dashboard(app, patient_data)
                 else:
                     show_message(login_frame, "Error fetching patient details", "red")
+
             else:
                 # Show error message on failure
                 show_message(login_frame, result.get("message", "Invalid credentials"), "red")
