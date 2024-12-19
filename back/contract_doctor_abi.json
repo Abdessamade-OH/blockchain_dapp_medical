@@ -25,6 +25,63 @@
 		"type": "event"
 	},
 	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_patientHhNumber",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_doctorHhNumber",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_recordHash",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_notes",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_encryptedData",
+				"type": "string"
+			}
+		],
+		"name": "createMedicalRecord",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_recordId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "_doctorHhNumber",
+				"type": "string"
+			}
+		],
+		"name": "deleteMedicalRecord",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
 		"anonymous": false,
 		"inputs": [
 			{
@@ -48,6 +105,137 @@
 		],
 		"name": "DoctorRegistered",
 		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_patientHhNumber",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_doctorHhNumber",
+				"type": "string"
+			}
+		],
+		"name": "grantPatientAccess",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "recordId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "patientHhNumber",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "doctorHhNumber",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			}
+		],
+		"name": "MedicalRecordCreated",
+		"type": "event"
+	},
+	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": true,
+				"internalType": "uint256",
+				"name": "recordId",
+				"type": "uint256"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "patientHhNumber",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "string",
+				"name": "doctorHhNumber",
+				"type": "string"
+			},
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			}
+		],
+		"name": "MedicalRecordDeleted",
+		"type": "event"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_name",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_specialization",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_hospitalName",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_hhNumber",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_password",
+				"type": "string"
+			}
+		],
+		"name": "registerDoctor",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_patientHhNumber",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_doctorHhNumber",
+				"type": "string"
+			}
+		],
+		"name": "revokePatientAccess",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
 	},
 	{
 		"inputs": [
@@ -134,6 +322,67 @@
 	{
 		"inputs": [
 			{
+				"internalType": "uint256",
+				"name": "_recordId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "_doctorHhNumber",
+				"type": "string"
+			}
+		],
+		"name": "getMedicalRecord",
+		"outputs": [
+			{
+				"components": [
+					{
+						"internalType": "string",
+						"name": "patientHhNumber",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "doctorHhNumber",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "recordHash",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "notes",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "encryptedData",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "timestamp",
+						"type": "uint256"
+					},
+					{
+						"internalType": "bool",
+						"name": "isDeleted",
+						"type": "bool"
+					}
+				],
+				"internalType": "struct ContractDoctor.MedicalRecord",
+				"name": "",
+				"type": "tuple"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
 				"internalType": "string",
 				"name": "_patientHhNumber",
 				"type": "string"
@@ -144,9 +393,52 @@
 				"type": "string"
 			}
 		],
-		"name": "grantPatientAccess",
-		"outputs": [],
-		"stateMutability": "nonpayable",
+		"name": "getPatientMedicalRecords",
+		"outputs": [
+			{
+				"components": [
+					{
+						"internalType": "string",
+						"name": "patientHhNumber",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "doctorHhNumber",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "recordHash",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "notes",
+						"type": "string"
+					},
+					{
+						"internalType": "string",
+						"name": "encryptedData",
+						"type": "string"
+					},
+					{
+						"internalType": "uint256",
+						"name": "timestamp",
+						"type": "uint256"
+					},
+					{
+						"internalType": "bool",
+						"name": "isDeleted",
+						"type": "bool"
+					}
+				],
+				"internalType": "struct ContractDoctor.MedicalRecord[]",
+				"name": "",
+				"type": "tuple[]"
+			}
+		],
+		"stateMutability": "view",
 		"type": "function"
 	},
 	{
@@ -166,80 +458,6 @@
 			}
 		],
 		"stateMutability": "view",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "string",
-				"name": "_name",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_specialization",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_hospitalName",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_hhNumber",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_password",
-				"type": "string"
-			}
-		],
-		"name": "registerDoctor",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "string",
-				"name": "_patientHhNumber",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_doctorHhNumber",
-				"type": "string"
-			}
-		],
-		"name": "revokePatientAccess",
-		"outputs": [],
-		"stateMutability": "nonpayable",
-		"type": "function"
-	},
-	{
-		"inputs": [
-			{
-				"internalType": "string",
-				"name": "_hhNumber",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_specialization",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "_hospitalName",
-				"type": "string"
-			}
-		],
-		"name": "updateDoctorInfo",
-		"outputs": [],
-		"stateMutability": "nonpayable",
 		"type": "function"
 	},
 	{

@@ -5,6 +5,44 @@ import os
 from dotenv import load_dotenv
 from flask_cors import CORS
 from connect_doctor import register_doctor
+import ipfshttpclient
+from cryptography.fernet import Fernet
+import base64
+from datetime import datetime
+import hashlib
+import requests
+
+# IPFS API configuration
+IPFS_API_BASE_URL = 'http://127.0.0.1:5001/api/v0'
+
+# Generate encryption key - in production, this should be managed securely
+encryption_key = Fernet.generate_key()
+fernet = Fernet(encryption_key)
+
+# Function to add content to IPFS
+def ipfs_add_bytes(content):
+    try:
+        files = {
+            'file': content
+        }
+        response = requests.post(f'{IPFS_API_BASE_URL}/add', files=files)
+        if response.status_code == 200:
+            return response.json()['Hash']
+        else:
+            raise Exception(f"Failed to add to IPFS: {response.text}")
+    except Exception as e:
+        raise Exception(f"IPFS add error: {str(e)}")
+
+# Function to get content from IPFS
+def ipfs_cat(hash_value):
+    try:
+        response = requests.post(f'{IPFS_API_BASE_URL}/cat?arg={hash_value}')
+        if response.status_code == 200:
+            return response.content
+        else:
+            raise Exception(f"Failed to get from IPFS: {response.text}")
+    except Exception as e:
+        raise Exception(f"IPFS cat error: {str(e)}")
 
 
 # Load environment variables from .env file
@@ -26,7 +64,7 @@ with open('contract_patient_abi.json', 'r') as abi_file:
     contract_abi = json.load(abi_file)
 
 # Contract address (replace with your actual contract address from Ganache)
-contract_address = '0x51E64eab866e1287490ceFeA9111a8207796C776'
+contract_address = '0x77BEB626ff16CfdFB8641FCe31612eCc1ccA1F4E'
 
 # Create contract instance
 patient_contract = w3.eth.contract(address=contract_address, abi=contract_abi)
@@ -37,7 +75,7 @@ with open('contract_doctor_abi.json', 'r') as abi_file:
     doctor_contract_abi = json.load(abi_file)
 
 # Contract address for the doctor contract (replace with actual address from Ganache)
-doctor_contract_address = '0xbA4891B3e0034a546668434C5bECf13B1B2cd11b'
+doctor_contract_address = '0xE29244A44e40693e6F9b63629B640F608D3dB38d'
 
 # Create contract instance for the doctor contract
 doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)
@@ -544,6 +582,178 @@ def update_doctor_info():
 
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
+    
+# Update the create_medical_record route
+@app.route('/create_medical_record', methods=['POST'])
+def create_medical_record():
+    try:
+        # Check if required fields are present
+        if 'file' not in request.files or not request.form.get('patient_hh_number') or not request.form.get('doctor_hh_number'):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        patient_hh_number = request.form.get('patient_hh_number')
+        doctor_hh_number = request.form.get('doctor_hh_number')
+        notes = request.form.get('notes', '')
+        file = request.files['file']
+
+        # First check if doctor has access
+        has_access = doctor_contract.functions.checkPatientAccess(
+            patient_hh_number,
+            doctor_hh_number
+        ).call()
+
+        if not has_access:
+            return jsonify({"error": "Doctor does not have access to this patient's records"}), 403
+
+        # Read and encrypt the file
+        file_content = file.read()
+        
+        # Generate a unique file hash
+        file_hash = hashlib.sha256(file_content).hexdigest()
+        
+        # Encrypt the file content
+        encrypted_content = fernet.encrypt(file_content)
+        
+        # Save encrypted file to IPFS using the new function
+        ipfs_hash = ipfs_add_bytes(encrypted_content)
+
+        # Create encrypted metadata
+        metadata = {
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "timestamp": datetime.now().isoformat(),
+            "ipfs_hash": ipfs_hash,
+            "file_hash": file_hash
+        }
+        encrypted_metadata = fernet.encrypt(json.dumps(metadata).encode())
+        
+        # Get the account from the private key
+        account = w3.eth.account.from_key(private_key)
+        account_address = account.address
+
+        # Get the current nonce
+        nonce = w3.eth.get_transaction_count(account_address)
+
+        # Create medical record on blockchain
+        transaction = doctor_contract.functions.createMedicalRecord(
+            patient_hh_number,
+            doctor_hh_number,
+            file_hash,  # record hash
+            notes,      # notes
+            base64.b64encode(encrypted_metadata).decode()  # encrypted metadata
+        ).build_transaction({
+            'from': account_address,
+            'gas': 2000000,
+            'gasPrice': w3.to_wei('20', 'gwei'),
+            'nonce': nonce,
+        })
+
+        # Sign and send the transaction
+        signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+        return jsonify({
+            "status": "success",
+            "message": "Medical record created successfully",
+            "data": {
+                "ipfs_hash": ipfs_hash,
+                "file_hash": file_hash,
+                "transaction_hash": tx_hash.hex(),
+                "block_number": tx_receipt.blockNumber
+            }
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/get_medical_records', methods=['GET'])
+def get_medical_records():
+    try:
+        patient_hh_number = request.args.get('patient_hh_number')
+        doctor_hh_number = request.args.get('doctor_hh_number')
+
+        if not patient_hh_number or not doctor_hh_number:
+            return jsonify({"error": "Missing required parameters"}), 400
+
+        # Check if doctor has access
+        has_access = doctor_contract.functions.checkPatientAccess(
+            patient_hh_number,
+            doctor_hh_number
+        ).call()
+
+        if not has_access:
+            return jsonify({"error": "Doctor does not have access to this patient's records"}), 403
+
+        # Get medical records from blockchain
+        records = doctor_contract.functions.getPatientMedicalRecords(
+            patient_hh_number,
+            doctor_hh_number
+        ).call()
+
+        # Process and decrypt records
+        processed_records = []
+        for record in records:
+            try:
+                # Decrypt the metadata
+                encrypted_metadata = base64.b64decode(record[4])  # record[4] is encryptedData
+                decrypted_metadata = fernet.decrypt(encrypted_metadata)
+                metadata = json.loads(decrypted_metadata.decode())
+
+                processed_record = {
+                    "record_hash": record[2],  # recordHash
+                    "notes": record[3],        # notes
+                    "timestamp": record[5],     # timestamp
+                    "filename": metadata.get("filename"),
+                    "content_type": metadata.get("content_type"),
+                    "ipfs_hash": metadata.get("ipfs_hash")
+                }
+                processed_records.append(processed_record)
+            except Exception as e:
+                print(f"Error processing record: {e}")
+                continue
+
+        return jsonify({
+            "status": "success",
+            "records": processed_records
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Update the get_medical_record_file route
+@app.route('/get_medical_record_file', methods=['GET'])
+def get_medical_record_file():
+    try:
+        ipfs_hash = request.args.get('ipfs_hash')
+        patient_hh_number = request.args.get('patient_hh_number')
+        doctor_hh_number = request.args.get('doctor_hh_number')
+
+        if not all([ipfs_hash, patient_hh_number, doctor_hh_number]):
+            return jsonify({"error": "Missing required parameters"}), 400
+
+        # Check if doctor has access
+        has_access = doctor_contract.functions.checkPatientAccess(
+            patient_hh_number,
+            doctor_hh_number
+        ).call()
+
+        if not has_access:
+            return jsonify({"error": "Doctor does not have access to this patient's records"}), 403
+
+        # Get encrypted content from IPFS using the new function
+        encrypted_content = ipfs_cat(ipfs_hash)
+        
+        # Decrypt the content
+        decrypted_content = fernet.decrypt(encrypted_content)
+
+        return decrypted_content, 200, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Disposition': f'attachment; filename=medical_record_{ipfs_hash}'
+        }
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Run the Flask app
 if __name__ == '__main__':
