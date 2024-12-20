@@ -100,7 +100,7 @@ with open('contract_doctor_abi.json', 'r') as abi_file:
     doctor_contract_abi = json.load(abi_file)
 
 # Contract address for the doctor contract (replace with actual address from Ganache)
-doctor_contract_address = '0x7bbacA065aD33e3221717EF486c67Ee45E84B0A2'
+doctor_contract_address = '0xc3C601ff26F03FAfE84839Ac26b88a1D687EcFaF'
 
 # Create contract instance for the doctor contract
 doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)
@@ -891,6 +891,108 @@ def get_doctor_patient_records():
         return jsonify({
             "status": "success",
             "records": all_records
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/update_medical_record', methods=['PUT'])
+def update_medical_record():
+    try:
+        # Check if IPFS node is running
+        if not check_ipfs_node():
+            return jsonify({"error": "IPFS node is not running. Please start your IPFS daemon."}), 500
+
+        # Check if required fields are present
+        if 'file' not in request.files or \
+           not request.form.get('patient_hh_number') or \
+           not request.form.get('doctor_hh_number') or \
+           not request.form.get('old_file_hash'):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        patient_hh_number = request.form.get('patient_hh_number')
+        doctor_hh_number = request.form.get('doctor_hh_number')
+        old_file_hash = request.form.get('old_file_hash')
+        notes = request.form.get('notes', '')
+        file = request.files['file']
+
+        # Check if doctor has access
+        has_access = doctor_contract.functions.checkPatientAccess(
+            patient_hh_number,
+            doctor_hh_number
+        ).call()
+
+        if not has_access:
+            return jsonify({"error": "Doctor does not have access to this patient's records"}), 403
+
+        # Read and encrypt the new file
+        file_content = file.read()
+        
+        # Generate a new file hash
+        new_file_hash = hashlib.sha256(file_content).hexdigest()
+        
+        # Encrypt the file content
+        encrypted_content = fernet.encrypt(file_content)
+        
+        # Save encrypted file to IPFS
+        new_ipfs_hash = ipfs_add_bytes(encrypted_content)
+
+        # Create encrypted metadata
+        metadata = {
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "timestamp": datetime.now().isoformat(),
+            "ipfs_hash": new_ipfs_hash,
+            "file_hash": new_file_hash
+        }
+        encrypted_metadata = fernet.encrypt(json.dumps(metadata).encode())
+
+        # Get the account from the private key
+        account = w3.eth.account.from_key(private_key)
+        account_address = account.address
+
+        # Get the current nonce
+        nonce = w3.eth.get_transaction_count(account_address)
+
+        # Update medical record on blockchain with retry mechanism
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                transaction = doctor_contract.functions.updateMedicalRecord(
+                    patient_hh_number,
+                    doctor_hh_number,
+                    old_file_hash,
+                    new_file_hash,
+                    notes,
+                    base64.b64encode(encrypted_metadata).decode()
+                ).build_transaction({
+                    'from': account_address,
+                    'gas': 2000000,
+                    'gasPrice': w3.to_wei('20', 'gwei'),
+                    'nonce': nonce + attempt,
+                })
+
+                signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
+                tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+                tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+                
+                if tx_receipt.status == 1:  # Transaction successful
+                    break
+            except Exception as e:
+                if attempt == max_retries - 1:  # Last attempt
+                    raise e
+                continue
+
+        return jsonify({
+            "status": "success",
+            "message": "Medical record updated successfully",
+            "data": {
+                "old_file_hash": old_file_hash,
+                "new_file_hash": new_file_hash,
+                "new_ipfs_hash": new_ipfs_hash,
+                "transaction_hash": tx_hash.hex(),
+                "block_number": tx_receipt.blockNumber
+            }
         })
 
     except Exception as e:

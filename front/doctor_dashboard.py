@@ -216,8 +216,6 @@ def show_doctor_dashboard(app, doctor_info):
     access_management_tab = tab_view.add("Access Management")
     create_access_management_section(access_management_tab, doctor_info)
 
-from tkinter import messagebox
-
 def create_doctor_info_section(parent, doctor_info):
     info_frame = ctk.CTkFrame(parent)
     info_frame.pack(fill="both", expand=True, padx=20, pady=20)

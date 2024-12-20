@@ -248,6 +248,50 @@
 				"internalType": "string",
 				"name": "_doctorHhNumber",
 				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_oldRecordHash",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_newRecordHash",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_notes",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_encryptedData",
+				"type": "string"
+			}
+		],
+		"name": "updateMedicalRecord",
+		"outputs": [
+			{
+				"internalType": "bool",
+				"name": "",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_patientHhNumber",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "_doctorHhNumber",
+				"type": "string"
 			}
 		],
 		"name": "checkPatientAccess",

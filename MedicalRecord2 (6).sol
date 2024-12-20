@@ -138,6 +138,9 @@ contract ContractDoctor {
     mapping(string => bool) public isDoctorRegistered;
     mapping(string => mapping(string => AccessPermission)) private patientAccessMap;
 
+    // Mapping to track all patients that granted access to a doctor
+    mapping(string => string[]) private doctorPatients;
+
     // Mapping from patient HH number to array of medical record IDs
     mapping(string => uint256[]) private patientRecords;
 
@@ -190,7 +193,6 @@ contract ContractDoctor {
 
         emit DoctorRegistered(_hhNumber, _name, msg.sender);
     }
-
     // Validate doctor login
     function validateDoctorLogin(string memory _hhNumber, string memory _password) 
         external 
@@ -214,7 +216,30 @@ contract ContractDoctor {
             grantTimestamp: block.timestamp
         });
 
+        // Add patient to doctor's patient list if not already present
+        bool patientExists = false;
+        string[] storage patients = doctorPatients[_doctorHhNumber];
+        for(uint i = 0; i < patients.length; i++) {
+            if(keccak256(abi.encodePacked(patients[i])) == keccak256(abi.encodePacked(_patientHhNumber))) {
+                patientExists = true;
+                break;
+            }
+        }
+        if(!patientExists) {
+            doctorPatients[_doctorHhNumber].push(_patientHhNumber);
+        }
+
         emit AccessPermissionChanged(_patientHhNumber, _doctorHhNumber, true);
+    }
+
+    // Get all patients that granted access to a doctor
+    function getDoctorPatients(string memory _doctorHhNumber) 
+        external 
+        view 
+        returns (string[] memory) 
+    {
+        require(isDoctorRegistered[_doctorHhNumber], "Doctor not registered");
+        return doctorPatients[_doctorHhNumber];
     }
 
     // Revoke access to a patient's medical record
@@ -314,6 +339,47 @@ contract ContractDoctor {
 
         emit MedicalRecordCreated(recordId, _patientHhNumber, _doctorHhNumber, block.timestamp);
         return recordId;
+    }
+
+    // Add this function to the ContractDoctor contract
+    function updateMedicalRecord(
+        string memory _patientHhNumber,
+        string memory _doctorHhNumber,
+        string memory _oldRecordHash,
+        string memory _newRecordHash,
+        string memory _notes,
+        string memory _encryptedData
+    ) external returns (bool) {
+        require(isDoctorRegistered[_doctorHhNumber], "Doctor not registered");
+        require(patientAccessMap[_patientHhNumber][_doctorHhNumber].hasAccess, "Doctor does not have access");
+
+        uint256[] memory recordIds = patientRecords[_patientHhNumber];
+        bool recordFound = false;
+        
+        for (uint256 i = 0; i < recordIds.length; i++) {
+            MedicalRecord storage record = medicalRecords[recordIds[i]];
+            if (!record.isDeleted && 
+                keccak256(abi.encodePacked(record.recordHash)) == keccak256(abi.encodePacked(_oldRecordHash))) {
+                
+                // Verify the record belongs to this doctor
+                require(
+                    keccak256(abi.encodePacked(record.doctorHhNumber)) == keccak256(abi.encodePacked(_doctorHhNumber)),
+                    "Only the creator can update the record"
+                );
+                
+                // Update the record
+                record.recordHash = _newRecordHash;
+                record.notes = _notes;
+                record.encryptedData = _encryptedData;
+                record.timestamp = block.timestamp;
+                
+                recordFound = true;
+                break;
+            }
+        }
+        
+        require(recordFound, "Record not found");
+        return true;
     }
 
     // Get all medical records for a patient
