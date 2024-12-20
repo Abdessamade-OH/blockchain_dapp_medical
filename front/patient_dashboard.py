@@ -6,6 +6,8 @@ import sys
 import tempfile
 import subprocess
 from datetime import datetime
+from PIL import Image, ImageTk
+import mimetypes
 
 def show_patient_dashboard(app, patient_info):
     # Clear the current screen
@@ -182,7 +184,7 @@ def refresh_records_table(patient_info, table_frame):
         view_button = customtkinter.CTkButton(
             row_frame,
             text="View",
-            command=lambda r=record: view_record(r)
+            command=lambda r=record: view_record(r, patient_info)
         )
         view_button.pack(side="left", padx=5)
 
@@ -206,32 +208,140 @@ def fetch_patient_records(patient_hh_number):
         print(f"Error fetching records: {e}")
         return []
 
-def view_record(record):
+def view_record(record, patient_info):
     try:
-        # Create a temporary file with a relevant extension based on content type
-        ext = record["content_type"].split('/')[-1]
-        with tempfile.NamedTemporaryFile(suffix=f'.{ext}', delete=False) as tf:
-            # Download the file from IPFS (you'll need to implement this)
-            # For now, we'll just show a message
-            messagebox.showinfo("View Record", f"Viewing record: {record['filename']}\nIPFS Hash: {record['ipfs_hash']}")
+        # Prepare the request parameters
+        params = {
+            "ipfs_hash": record["ipfs_hash"],
+            "patient_hh_number": patient_info.get("hhNumber")
+        }
+        
+        # Only add doctor_hh_number if it exists and is not empty
+        if patient_info.get("doctorHhNumber"):
+            params["doctor_hh_number"] = patient_info.get("doctorHhNumber")
+        
+        # Get the file content from the API
+        response = requests.get(
+            "http://127.0.0.1:5000/get_medical_record_file",
+            params=params,
+            stream=True
+        )
+        
+        if response.status_code != 200:
+            error_msg = response.json().get('error', 'Unknown error')
+            messagebox.showerror("Error", f"Failed to fetch record: {error_msg}")
+            return
+
+        # Create a temporary file with appropriate extension
+        ext = guess_extension(record["content_type"]) or '.tmp'
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tf:
+            # Write the decrypted content to the temporary file
+            for chunk in response.iter_content(chunk_size=8192):
+                tf.write(chunk)
+            tf.flush()
             
-            # Here you would typically:
-            # 1. Download the file from IPFS using the ipfs_hash
-            # 2. Save it to the temporary file
-            # 3. Open it with the default system application
-            
-            # Example of opening the file (uncomment when implemented):
-            # tf.write(downloaded_content)
-            # tf.flush()
-            # if sys.platform == 'darwin':  # macOS
-            #     subprocess.call(('open', tf.name))
-            # elif sys.platform == 'win32':  # Windows
-            #     os.startfile(tf.name)
-            # else:  # Linux
-            #     subprocess.call(('xdg-open', tf.name))
-            
+            # Open the file based on the content type
+            if record["content_type"].startswith("image/"):
+                show_image_viewer(tf.name, record["filename"])
+            elif record["content_type"].startswith("text/"):
+                show_text_viewer(tf.name, record["filename"])
+            elif record["content_type"].startswith("application/pdf"):
+                open_pdf(tf.name)
+            else:
+                open_with_system_default(tf.name)
+    except requests.RequestException as e:
+        messagebox.showerror("Error", f"Network error: {str(e)}")
+    except IOError as e:
+        messagebox.showerror("Error", f"File operation error: {str(e)}")
     except Exception as e:
-        messagebox.showerror("Error", f"Failed to view record: {str(e)}")
+        messagebox.showerror("Error", f"Unexpected error: {str(e)}")
+
+def show_image_viewer(file_path, title):
+    """Display image files in a new window."""
+    try:
+        viewer_window = customtkinter.CTkToplevel()
+        viewer_window.title(f"Image Viewer - {title}")
+        viewer_window.geometry("800x600")
+
+        # Load and display the image
+        image = Image.open(file_path)
+        
+        # Resize image if it's too large while maintaining aspect ratio
+        max_size = (780, 580)
+        image.thumbnail(max_size, Image.Resampling.LANCZOS)
+        
+        # Convert to PhotoImage
+        photo = ImageTk.PhotoImage(image)
+        
+        # Create label to display image
+        label = customtkinter.CTkLabel(viewer_window)
+        label.configure(image=photo)
+        label.image = photo  # Keep a reference
+        label.pack(expand=True, fill="both", padx=10, pady=10)
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to display image: {str(e)}")
+
+def show_text_viewer(file_path, title):
+    """Display text files in a new window."""
+    try:
+        viewer_window = customtkinter.CTkToplevel()
+        viewer_window.title(f"Text Viewer - {title}")
+        viewer_window.geometry("800x600")
+
+        # Create text widget
+        text_widget = customtkinter.CTkTextbox(viewer_window)
+        text_widget.pack(expand=True, fill="both", padx=10, pady=10)
+
+        # Read and display the content
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            text_widget.insert("1.0", content)
+            text_widget.configure(state="disabled")  # Make read-only
+    except UnicodeDecodeError:
+        messagebox.showerror("Error", "Unable to read the text file. It might be in an unsupported format.")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to display text: {str(e)}")
+
+def open_pdf(file_path):
+    """Open PDF files."""
+    try:
+        if sys.platform == 'darwin':  # macOS
+            subprocess.run(['open', file_path], check=True)
+        elif sys.platform == 'win32':  # Windows
+            os.startfile(file_path)
+        else:  # Linux
+            subprocess.run(['xdg-open', file_path], check=True)
+    except (subprocess.SubprocessError, OSError) as e:
+        messagebox.showerror("Error", f"Failed to open PDF: {str(e)}")
+
+def open_with_system_default(file_path):
+    """Open file with system default application."""
+    try:
+        if sys.platform == 'darwin':  # macOS
+            subprocess.run(['open', file_path], check=True)
+        elif sys.platform == 'win32':  # Windows
+            os.startfile(file_path)
+        else:  # Linux
+            subprocess.run(['xdg-open', file_path], check=True)
+    except (subprocess.SubprocessError, OSError) as e:
+        messagebox.showerror("Error", f"Failed to open file: {str(e)}")
+
+def guess_extension(content_type):
+    """Get file extension from content type."""
+    try:
+        extensions = {
+            'image/jpeg': '.jpg',
+            'image/png': '.png',
+            'image/gif': '.gif',
+            'text/plain': '.txt',
+            'text/html': '.html',
+            'application/pdf': '.pdf',
+            'application/json': '.json',
+            'application/xml': '.xml'
+        }
+        return extensions.get(content_type.lower(), '')
+    except Exception:
+        return '.tmp'  # Default extension if something goes wrong
 
 def create_access_management_section(parent, patient_info):
     access_frame = customtkinter.CTkFrame(parent)

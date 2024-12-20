@@ -19,23 +19,40 @@ IPFS_API_BASE_URL = 'http://127.0.0.1:5001/api/v0'
 encryption_key = Fernet.generate_key()
 fernet = Fernet(encryption_key)
 
-# Function to add content to IPFS
+# Update these IPFS functions
 def ipfs_add_bytes(content):
     try:
         files = {
             'file': content
         }
+        # Add the file to IPFS
         response = requests.post(f'{IPFS_API_BASE_URL}/add', files=files)
-        if response.status_code == 200:
-            return response.json()['Hash']
-        else:
+        if response.status_code != 200:
             raise Exception(f"Failed to add to IPFS: {response.text}")
+        
+        # Get the hash from the response
+        ipfs_hash = response.json()['Hash']
+        
+        # Pin the file to make it persistent
+        pin_response = requests.post(f'{IPFS_API_BASE_URL}/pin/add?arg={ipfs_hash}')
+        if pin_response.status_code != 200:
+            raise Exception(f"Failed to pin file: {pin_response.text}")
+            
+        return ipfs_hash
     except Exception as e:
         raise Exception(f"IPFS add error: {str(e)}")
 
-# Function to get content from IPFS
 def ipfs_cat(hash_value):
     try:
+        # First verify the file is pinned
+        pin_ls_response = requests.post(f'{IPFS_API_BASE_URL}/pin/ls?arg={hash_value}')
+        if pin_ls_response.status_code != 200:
+            # If not pinned, try to pin it
+            pin_response = requests.post(f'{IPFS_API_BASE_URL}/pin/add?arg={hash_value}')
+            if pin_response.status_code != 200:
+                print(f"Warning: Could not pin file {hash_value}")
+        
+        # Get the file content
         response = requests.post(f'{IPFS_API_BASE_URL}/cat?arg={hash_value}')
         if response.status_code == 200:
             return response.content
@@ -43,6 +60,14 @@ def ipfs_cat(hash_value):
             raise Exception(f"Failed to get from IPFS: {response.text}")
     except Exception as e:
         raise Exception(f"IPFS cat error: {str(e)}")
+
+# Add this new function to check IPFS node status
+def check_ipfs_node():
+    try:
+        response = requests.post(f'{IPFS_API_BASE_URL}/id')
+        return response.status_code == 200
+    except:
+        return False
 
 
 # Load environment variables from .env file
@@ -64,7 +89,7 @@ with open('contract_patient_abi.json', 'r') as abi_file:
     contract_abi = json.load(abi_file)
 
 # Contract address (replace with your actual contract address from Ganache)
-contract_address = '0x77BEB626ff16CfdFB8641FCe31612eCc1ccA1F4E'
+contract_address = '0xA297EAe3F22c6Cb634CCb888D54E838399D3DCE5'
 
 # Create contract instance
 patient_contract = w3.eth.contract(address=contract_address, abi=contract_abi)
@@ -81,7 +106,7 @@ doctor_contract_address = '0x9AA490223Bb9569e73bf3218aDA69c52F4d34a40'
 doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)
 
 # Get the account from Ganache (the first account in the list, for example)
-account_address = w3.eth.accounts[0]
+account_address = w3.eth.accounts[6]
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -587,6 +612,10 @@ def update_doctor_info():
 @app.route('/create_medical_record', methods=['POST'])
 def create_medical_record():
     try:
+        # Check if IPFS node is running
+        if not check_ipfs_node():
+            return jsonify({"error": "IPFS node is not running. Please start your IPFS daemon."}), 500
+
         # Check if required fields are present
         if 'file' not in request.files or not request.form.get('patient_hh_number') or not request.form.get('doctor_hh_number'):
             return jsonify({"error": "Missing required fields"}), 400
@@ -596,7 +625,7 @@ def create_medical_record():
         notes = request.form.get('notes', '')
         file = request.files['file']
 
-        # First check if doctor has access
+        # Check if doctor has access
         has_access = doctor_contract.functions.checkPatientAccess(
             patient_hh_number,
             doctor_hh_number
@@ -614,7 +643,7 @@ def create_medical_record():
         # Encrypt the file content
         encrypted_content = fernet.encrypt(file_content)
         
-        # Save encrypted file to IPFS using the new function
+        # Save encrypted file to IPFS and ensure it's pinned
         ipfs_hash = ipfs_add_bytes(encrypted_content)
 
         # Create encrypted metadata
@@ -634,24 +663,33 @@ def create_medical_record():
         # Get the current nonce
         nonce = w3.eth.get_transaction_count(account_address)
 
-        # Create medical record on blockchain
-        transaction = doctor_contract.functions.createMedicalRecord(
-            patient_hh_number,
-            doctor_hh_number,
-            file_hash,  # record hash
-            notes,      # notes
-            base64.b64encode(encrypted_metadata).decode()  # encrypted metadata
-        ).build_transaction({
-            'from': account_address,
-            'gas': 2000000,
-            'gasPrice': w3.to_wei('20', 'gwei'),
-            'nonce': nonce,
-        })
+        # Create medical record on blockchain with retry mechanism
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                transaction = doctor_contract.functions.createMedicalRecord(
+                    patient_hh_number,
+                    doctor_hh_number,
+                    file_hash,
+                    notes,
+                    base64.b64encode(encrypted_metadata).decode()
+                ).build_transaction({
+                    'from': account_address,
+                    'gas': 2000000,
+                    'gasPrice': w3.to_wei('20', 'gwei'),
+                    'nonce': nonce + attempt,  # Increment nonce for each retry
+                })
 
-        # Sign and send the transaction
-        signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
-        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
-        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+                signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
+                tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+                tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+                
+                if tx_receipt.status == 1:  # Transaction successful
+                    break
+            except Exception as e:
+                if attempt == max_retries - 1:  # Last attempt
+                    raise e
+                continue
 
         return jsonify({
             "status": "success",
@@ -729,19 +767,20 @@ def get_medical_record_file():
         patient_hh_number = request.args.get('patient_hh_number')
         doctor_hh_number = request.args.get('doctor_hh_number')
 
-        if not all([ipfs_hash, patient_hh_number, doctor_hh_number]):
+        if not ipfs_hash or not patient_hh_number:
             return jsonify({"error": "Missing required parameters"}), 400
 
-        # Check if doctor has access
-        has_access = doctor_contract.functions.checkPatientAccess(
-            patient_hh_number,
-            doctor_hh_number
-        ).call()
+        # If doctor_hh_number is provided, check doctor's access
+        if doctor_hh_number:
+            has_access = doctor_contract.functions.checkPatientAccess(
+                patient_hh_number,
+                doctor_hh_number
+            ).call()
 
-        if not has_access:
-            return jsonify({"error": "Doctor does not have access to this patient's records"}), 403
+            if not has_access:
+                return jsonify({"error": "Doctor does not have access to this patient's records"}), 403
 
-        # Get encrypted content from IPFS using the new function
+        # Get encrypted content from IPFS
         encrypted_content = ipfs_cat(ipfs_hash)
         
         # Decrypt the content

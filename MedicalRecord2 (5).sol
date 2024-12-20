@@ -124,15 +124,46 @@ contract ContractDoctor {
         uint256 grantTimestamp;
     }
 
+    struct MedicalRecord {
+    string patientHhNumber;
+    string doctorHhNumber;
+    string recordHash;
+    string notes;
+    string encryptedData;
+    uint256 timestamp;
+    bool isDeleted;
+    }   
+
     mapping(string => Doctor) private doctors;
     mapping(string => bool) public isDoctorRegistered;
     mapping(string => mapping(string => AccessPermission)) private patientAccessMap;
 
+    // Mapping from patient HH number to array of medical record IDs
+    mapping(string => uint256[]) private patientRecords;
+
     event DoctorRegistered(string indexed hhNumber, string name, address walletAddress);
     event AccessPermissionChanged(string indexed patientHhNumber, string indexed doctorHhNumber, bool granted);
 
+    // Add these new events inside the ContractDoctor contract
+    event MedicalRecordCreated(
+        uint256 indexed recordId,
+        string patientHhNumber,
+        string doctorHhNumber,
+        uint256 timestamp
+    );
+
+    event MedicalRecordDeleted(
+        uint256 indexed recordId,
+        string patientHhNumber,
+        string doctorHhNumber,
+        uint256 timestamp
+    );
+
     // Add this at the beginning of the contract
     string[] private registeredDoctors;
+
+    // Array to store all medical records
+    MedicalRecord[] private medicalRecords;
 
     // Register a new doctor
     function registerDoctor(
@@ -159,18 +190,6 @@ contract ContractDoctor {
 
         emit DoctorRegistered(_hhNumber, _name, msg.sender);
     }
-
-        function updateDoctorInfo(
-        string memory _hhNumber,
-        string memory _specialization,
-        string memory _hospitalName
-            ) external {
-                require(isDoctorRegistered[_hhNumber], "Doctor not registered");
-                require(doctors[_hhNumber].walletAddress == msg.sender, "Unauthorized access");
-
-                doctors[_hhNumber].specialization = _specialization;
-                doctors[_hhNumber].hospitalName = _hospitalName;
-            }
 
     // Validate doctor login
     function validateDoctorLogin(string memory _hhNumber, string memory _password) 
@@ -266,6 +285,137 @@ contract ContractDoctor {
         }
         
         return doctorHhNumbers;
+    }
+
+    // Create a new medical record
+    function createMedicalRecord(
+        string memory _patientHhNumber,
+        string memory _doctorHhNumber,
+        string memory _recordHash,
+        string memory _notes,
+        string memory _encryptedData
+    ) external returns (uint256) {
+        require(isDoctorRegistered[_doctorHhNumber], "Doctor not registered");
+        require(patientAccessMap[_patientHhNumber][_doctorHhNumber].hasAccess, "Doctor does not have access");
+
+        MedicalRecord memory newRecord = MedicalRecord({
+            patientHhNumber: _patientHhNumber,
+            doctorHhNumber: _doctorHhNumber,
+            recordHash: _recordHash,
+            notes: _notes,
+            encryptedData: _encryptedData,
+            timestamp: block.timestamp,
+            isDeleted: false
+        });
+
+        medicalRecords.push(newRecord);
+        uint256 recordId = medicalRecords.length - 1;
+        patientRecords[_patientHhNumber].push(recordId);
+
+        emit MedicalRecordCreated(recordId, _patientHhNumber, _doctorHhNumber, block.timestamp);
+        return recordId;
+    }
+
+    // Get all medical records for a patient
+    function getPatientMedicalRecords(string memory _patientHhNumber, string memory _doctorHhNumber) 
+        external 
+        view 
+        returns (MedicalRecord[] memory) 
+    {
+        require(isDoctorRegistered[_doctorHhNumber], "Doctor not registered");
+        require(patientAccessMap[_patientHhNumber][_doctorHhNumber].hasAccess, "Doctor does not have access");
+
+        uint256[] memory recordIds = patientRecords[_patientHhNumber];
+        uint256 activeRecordCount = 0;
+
+        // Count active records
+        for (uint256 i = 0; i < recordIds.length; i++) {
+            if (!medicalRecords[recordIds[i]].isDeleted) {
+                activeRecordCount++;
+            }
+        }
+
+        // Create array of active records
+        MedicalRecord[] memory activeRecords = new MedicalRecord[](activeRecordCount);
+        uint256 currentIndex = 0;
+
+        for (uint256 i = 0; i < recordIds.length; i++) {
+            if (!medicalRecords[recordIds[i]].isDeleted) {
+                activeRecords[currentIndex] = medicalRecords[recordIds[i]];
+                currentIndex++;
+            }
+        }
+
+        return activeRecords;
+    }
+
+    // Get a specific medical record
+    function getMedicalRecord(uint256 _recordId, string memory _doctorHhNumber) 
+        external 
+        view 
+        returns (MedicalRecord memory) 
+    {
+        require(_recordId < medicalRecords.length, "Record does not exist");
+        require(!medicalRecords[_recordId].isDeleted, "Record has been deleted");
+        require(isDoctorRegistered[_doctorHhNumber], "Doctor not registered");
+        require(
+            patientAccessMap[medicalRecords[_recordId].patientHhNumber][_doctorHhNumber].hasAccess,
+            "Doctor does not have access"
+        );
+
+        return medicalRecords[_recordId];
+    }
+
+    // Soft delete a medical record
+    function deleteMedicalRecord(uint256 _recordId, string memory _doctorHhNumber) external {
+        require(_recordId < medicalRecords.length, "Record does not exist");
+        require(!medicalRecords[_recordId].isDeleted, "Record already deleted");
+        require(isDoctorRegistered[_doctorHhNumber], "Doctor not registered");
+        require(
+            keccak256(abi.encodePacked(medicalRecords[_recordId].doctorHhNumber)) == 
+            keccak256(abi.encodePacked(_doctorHhNumber)),
+            "Only the creator can delete the record"
+        );
+        
+        medicalRecords[_recordId].isDeleted = true;
+        
+        emit MedicalRecordDeleted(
+            _recordId,
+            medicalRecords[_recordId].patientHhNumber,
+            _doctorHhNumber,
+            block.timestamp
+        );
+    }
+
+    function getPatientAllMedicalRecords(string memory _patientHhNumber) 
+        external 
+        view 
+        returns (MedicalRecord[] memory) 
+    {
+        // Get all record IDs for the patient
+        uint256[] memory recordIds = patientRecords[_patientHhNumber];
+        uint256 activeRecordCount = 0;
+
+        // Count active (non-deleted) records
+        for (uint256 i = 0; i < recordIds.length; i++) {
+            if (!medicalRecords[recordIds[i]].isDeleted) {
+                activeRecordCount++;
+            }
+        }
+
+        // Create array of active records
+        MedicalRecord[] memory activeRecords = new MedicalRecord[](activeRecordCount);
+        uint256 currentIndex = 0;
+
+        // Fill the array with active records
+        for (uint256 i = 0; i < recordIds.length; i++) {
+            if (!medicalRecords[recordIds[i]].isDeleted) {
+                activeRecords[currentIndex] = medicalRecords[recordIds[i]];
+                currentIndex++;
+            }
+        }
+
+        return activeRecords;
     }
 }
 
