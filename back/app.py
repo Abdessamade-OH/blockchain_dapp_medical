@@ -100,7 +100,7 @@ with open('contract_doctor_abi.json', 'r') as abi_file:
     doctor_contract_abi = json.load(abi_file)
 
 # Contract address for the doctor contract (replace with actual address from Ganache)
-doctor_contract_address = '0x9AA490223Bb9569e73bf3218aDA69c52F4d34a40'
+doctor_contract_address = '0x7bbacA065aD33e3221717EF486c67Ee45E84B0A2'
 
 # Create contract instance for the doctor contract
 doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)
@@ -833,6 +833,64 @@ def get_patient_own_records():
         return jsonify({
             "status": "success",
             "records": processed_records
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/get_doctor_patient_records', methods=['GET'])
+def get_doctor_patient_records():
+    try:
+        doctor_hh_number = request.args.get('doctor_hh_number')
+
+        if not doctor_hh_number:
+            return jsonify({"error": "Missing doctor_hh_number parameter"}), 400
+
+        # Get all patients that granted access to the doctor
+        patients = doctor_contract.functions.getDoctorPatients(doctor_hh_number).call()
+        
+        all_records = []
+        
+        # Get records for each patient
+        for patient_hh_number in patients:
+            # Check if doctor still has access
+            has_access = doctor_contract.functions.checkPatientAccess(
+                patient_hh_number,
+                doctor_hh_number
+            ).call()
+            
+            if has_access:
+                # Get patient records
+                records = doctor_contract.functions.getPatientMedicalRecords(
+                    patient_hh_number,
+                    doctor_hh_number
+                ).call()
+                
+                # Process and decrypt records
+                for record in records:
+                    try:
+                        # Decrypt the metadata
+                        encrypted_metadata = base64.b64decode(record[4])  # record[4] is encryptedData
+                        decrypted_metadata = fernet.decrypt(encrypted_metadata)
+                        metadata = json.loads(decrypted_metadata.decode())
+
+                        processed_record = {
+                            "patient_hh_number": patient_hh_number,
+                            "record_hash": record[2],  # recordHash
+                            "notes": record[3],        # notes
+                            "timestamp": record[5],     # timestamp
+                            "filename": metadata.get("filename"),
+                            "content_type": metadata.get("content_type"),
+                            "ipfs_hash": metadata.get("ipfs_hash")
+                        }
+                        all_records.append(processed_record)
+                    except Exception as e:
+                        print(f"Error processing record: {e}")
+                        continue
+
+        return jsonify({
+            "status": "success",
+            "records": all_records
         })
 
     except Exception as e:
