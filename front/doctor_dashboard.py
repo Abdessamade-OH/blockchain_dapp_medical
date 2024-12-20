@@ -21,6 +21,18 @@ def add_medical_records_section(parent, doctor_info):
     )
     patient_hh_entry.pack(side="left", padx=10)
 
+    # Notes Entry
+    notes_frame = ctk.CTkFrame(records_frame)
+    notes_frame.pack(fill="x", pady=10)
+    
+    notes_entry = ctk.CTkTextbox(
+        notes_frame,
+        height=100,
+        width=300
+    )
+    notes_entry.pack(side="left", padx=10)
+    notes_entry.insert("1.0", "Enter notes here...")
+
     # File Selection
     file_frame = ctk.CTkFrame(records_frame)
     file_frame.pack(fill="x", pady=10)
@@ -60,66 +72,88 @@ def add_medical_records_section(parent, doctor_info):
     )
     select_file_btn.pack(side="left", padx=10)
 
+    # Status message
+    status_label = ctk.CTkLabel(
+        records_frame,
+        text="",
+        text_color="gray"
+    )
+    status_label.pack(pady=5)
+
+    def update_status(message, is_error=False):
+        status_label.configure(
+            text=message,
+            text_color="red" if is_error else "green"
+        )
+        # Reset status after 5 seconds
+        records_frame.after(5000, lambda: status_label.configure(text=""))
+
     # Create Medical Record Button
     def create_medical_record():
         try:
             patient_hh = patient_hh_entry.get()
             if not patient_hh:
-                show_message("Error", "Please enter patient HH number")
+                update_status("Please enter patient HH number", True)
                 return
             
             if 'path' not in selected_file:
-                show_message("Error", "Please select a file")
+                update_status("Please select a file", True)
                 return
-            
-            # Connect to local IPFS daemon
-            # Make sure you have IPFS daemon running locally
-            ipfs_client = ipfsapi.connect('127.0.0.1', 5001)
-            
-            # Generate symmetric encryption key
-            symmetric_key = Fernet.generate_key()
-            fernet = Fernet(symmetric_key)
-            
-            # Read and encrypt file
-            with open(selected_file['path'], 'rb') as file:
-                file_data = file.read()
-            
-            encrypted_data = fernet.encrypt(file_data)
-            
-            # Upload encrypted file to IPFS
-            temp_encrypted_file = 'temp_encrypted_file'
-            with open(temp_encrypted_file, 'wb') as temp_file:
-                temp_file.write(encrypted_data)
-            
-            # Add file to IPFS
-            ipfs_result = ipfs_client.add(temp_encrypted_file)
-            ipfs_hash = ipfs_result['Hash']
-            
-            # Cleanup temporary file
-            os.remove(temp_encrypted_file)
+
+            # Prepare form data
+            form_data = {
+                'patient_hh_number': patient_hh,
+                'doctor_hh_number': doctor_info['hhNumber'],
+                'notes': notes_entry.get("1.0", "end-1c")
+            }
+
+            # Prepare file
+            files = {
+                'file': (
+                    os.path.basename(selected_file['path']),
+                    open(selected_file['path'], 'rb'),
+                    'application/octet-stream'
+                )
+            }
+
+            # Show loading status
+            update_status("Creating medical record...")
             
             # Send to backend
-            data = {
-                "patient_hh": patient_hh,
-                "ipfs_hash": ipfs_hash,
-                "encrypted_key": symmetric_key.decode('utf-8'),
-                "doctor_hh": doctor_info['hhNumber'],
-                "filename": os.path.basename(selected_file['path'])
-            }
-            
-            response = requests.post("http://127.0.0.1:5000/create_medical_record", json=data)
+            response = requests.post(
+                "http://127.0.0.1:5000/create_medical_record",
+                data=form_data,
+                files=files
+            )
             
             if response.status_code == 200:
-                show_message("Success", "Medical record created successfully")
-                # Reset file selection
+                response_data = response.json()
+                success_message = (
+                    f"Medical record created successfully\n"
+                    f"Transaction Hash: {response_data['data']['transaction_hash'][:10]}..."
+                )
+                update_status(success_message)
+                
+                # Reset form
+                patient_hh_entry.delete(0, 'end')
+                notes_entry.delete("1.0", "end")
+                notes_entry.insert("1.0", "Enter notes here...")
                 selected_file_label.configure(text="No file selected")
                 if 'path' in selected_file:
                     del selected_file['path']
+            
+            elif response.status_code == 403:
+                update_status("Error: No access to this patient's records", True)
             else:
-                show_message("Error", "Failed to create medical record")
-        
+                error_message = response.json().get('error', 'Failed to create medical record')
+                update_status(f"Error: {error_message}", True)
+
         except Exception as e:
-            show_message("Error", str(e))
+            update_status(f"Error: {str(e)}", True)
+        finally:
+            # Close file if it was opened
+            if 'path' in selected_file and 'file' in files:
+                files['file'][1].close()
 
     create_record_btn = ctk.CTkButton(
         records_frame,
@@ -127,6 +161,8 @@ def add_medical_records_section(parent, doctor_info):
         command=create_medical_record
     )
     create_record_btn.pack(pady=10)
+
+    return records_frame
 
 
 def show_doctor_dashboard(app, doctor_info):
