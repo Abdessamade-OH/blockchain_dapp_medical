@@ -214,8 +214,8 @@ def show_doctor_dashboard(app, doctor_info):
     add_medical_records_section(medical_records_tab, doctor_info)
 
     # Access Management Tab
-    access_management_tab = tab_view.add("Access Management")
-    create_access_management_section(access_management_tab, doctor_info)
+    audit_logs_tab = tab_view.add("Audit Logs")
+    audit_logs_section(audit_logs_tab, doctor_info)
 
 def create_doctor_info_section(parent, doctor_info):
     info_frame = ctk.CTkFrame(parent)
@@ -698,27 +698,8 @@ def guess_extension(content_type):
     except Exception:
         return '.tmp'  # Default extension if something goes wrong
 
-def create_access_management_section(parent, doctor_info):
-    access_frame = ctk.CTkFrame(parent)
-    access_frame.pack(fill="both", expand=True, padx=20, pady=20)
-
-    # Patient access request section
-    request_frame = ctk.CTkFrame(access_frame)
-    request_frame.pack(fill="x", pady=10)
-
-    patient_hh_entry = ctk.CTkEntry(
-        request_frame,
-        placeholder_text="Patient HH Number",
-        width=300
-    )
-    patient_hh_entry.pack(side="left", padx=10)
-
-    request_access_btn = ctk.CTkButton(
-        request_frame,
-        text="Request Access",
-        command=lambda: request_patient_access(patient_hh_entry.get(), doctor_info['hhNumber'])
-    )
-    request_access_btn.pack(side="left", padx=10)
+def audit_logs_section(parent, doctor_info):
+    pass
 
 def update_patient_results(results_frame, patient_data):
     # Clear existing content

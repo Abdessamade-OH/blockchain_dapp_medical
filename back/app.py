@@ -105,6 +105,17 @@ doctor_contract_address = '0x17C77682272fA63e9B5bA1a50e1795d6d869212d'
 # Create contract instance for the doctor contract
 doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)
 
+
+# Load the ABI for the audit contract (add at the start of your Flask app)
+with open('contract_audit_abi.json', 'r') as abi_file:
+    audit_contract_abi = json.load(abi_file)
+
+# Contract address for the audit contract (replace with actual address)
+audit_contract_address = '0x4fd60f571c6dB1B88901739CE44fFD5c1441C064'  # Replace with actual address
+
+# Create contract instance for the audit contract
+audit_contract = w3.eth.contract(address=audit_contract_address, abi=audit_contract_abi)
+
 # Get the account from Ganache (the first account in the list, for example)
 account_address = w3.eth.accounts[6]
 
@@ -391,6 +402,15 @@ def grant_doctor_access():
         tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
         tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
+        if tx_receipt.status == 1:
+            # Create audit log for access grant
+            audit_details = json.dumps({
+                "action": "Granted access",
+                "doctor": data['doctor_hh_number'],
+                "patient": data['patient_hh_number']
+            })
+            create_audit_log(data['doctor_hh_number'], 3, audit_details)  # 3 for GRANT_ACCESS action
+
         return jsonify({
             "status": "success",
             "message": "Access granted successfully",
@@ -398,11 +418,7 @@ def grant_doctor_access():
             "transaction_receipt": {
                 "blockHash": tx_receipt.blockHash.hex(),
                 "blockNumber": tx_receipt.blockNumber,
-                "contractAddress": tx_receipt.contractAddress,
-                "cumulativeGasUsed": tx_receipt.cumulativeGasUsed,
-                "gasUsed": tx_receipt.gasUsed,
-                "status": tx_receipt.status,
-                "transactionIndex": tx_receipt.transactionIndex
+                "status": tx_receipt.status
             }
         })
 
@@ -449,6 +465,15 @@ def revoke_doctor_access():
         tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
         tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
+        if tx_receipt.status == 1:
+            # Create audit log for access revocation
+            audit_details = json.dumps({
+                "action": "Revoked access",
+                "doctor": data['doctor_hh_number'],
+                "patient": data['patient_hh_number']
+            })
+            create_audit_log(data['doctor_hh_number'], 4, audit_details)  # 4 for REVOKE_ACCESS action
+
         return jsonify({
             "status": "success",
             "message": "Access revoked successfully",
@@ -456,11 +481,7 @@ def revoke_doctor_access():
             "transaction_receipt": {
                 "blockHash": tx_receipt.blockHash.hex(),
                 "blockNumber": tx_receipt.blockNumber,
-                "contractAddress": tx_receipt.contractAddress,
-                "cumulativeGasUsed": tx_receipt.cumulativeGasUsed,
-                "gasUsed": tx_receipt.gasUsed,
-                "status": tx_receipt.status,
-                "transactionIndex": tx_receipt.transactionIndex
+                "status": tx_receipt.status
             }
         })
 
@@ -731,6 +752,15 @@ def create_medical_record():
                     raise Exception(f"Failed to create medical record after {max_blockchain_retries} attempts: {str(e)}")
                 continue
 
+        if tx_receipt.status == 1:
+            # Create audit log for record creation
+            audit_details = json.dumps({
+                "action": "Created medical record",
+                "patient": patient_hh_number,
+                "file_hash": file_hash
+            })
+            create_audit_log(doctor_hh_number, 0, audit_details)  # 0 for CREATE action
+
         return jsonify({
             "status": "success",
             "message": "Medical record created successfully",
@@ -825,6 +855,15 @@ def get_medical_record_file():
         
         # Decrypt the content
         decrypted_content = fernet.decrypt(encrypted_content)
+
+        # If doctor is accessing the record, create audit log
+        if doctor_hh_number:
+            audit_details = json.dumps({
+                "action": "Viewed medical record",
+                "patient": patient_hh_number,
+                "ipfs_hash": ipfs_hash
+            })
+            create_audit_log(doctor_hh_number, 2, audit_details)  # 2 for VIEW action
 
         return decrypted_content, 200, {
             'Content-Type': 'application/octet-stream',
@@ -1023,6 +1062,16 @@ def update_medical_record():
                     raise e
                 continue
 
+        if tx_receipt.status == 1:
+            # Create audit log for record update
+            audit_details = json.dumps({
+                "action": "Updated medical record",
+                "patient": patient_hh_number,
+                "old_file_hash": old_file_hash,
+                "new_file_hash": new_file_hash
+            })
+            create_audit_log(doctor_hh_number, 1, audit_details)  # 1 for UPDATE action
+
         return jsonify({
             "status": "success",
             "message": "Medical record updated successfully",
@@ -1037,6 +1086,107 @@ def update_medical_record():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+# Helper function to create audit logs
+def create_audit_log(entity_id, action_type, details):
+    """
+    Create an audit log entry
+    Parameters:
+    - entity_id: Doctor or Patient HH number
+    - action_type: Integer representing the action (0-4)
+    - details: String containing additional information
+    """
+    try:
+        # Get the account from the private key
+        account = w3.eth.account.from_key(private_key)
+        account_address = account.address
+
+        # Get the current nonce
+        nonce = w3.eth.get_transaction_count(account_address)
+
+        # Prepare the transaction
+        transaction = audit_contract.functions.logAudit(
+            entity_id,
+            action_type,
+            details
+        ).build_transaction({
+            'from': account_address,
+            'gas': 2000000,
+            'gasPrice': w3.to_wei('20', 'gwei'),
+            'nonce': nonce,
+        })
+
+        # Sign the transaction
+        signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
+
+        # Send the signed transaction
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+
+        # Wait for transaction receipt
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        return True
+    except Exception as e:
+        print(f"Error creating audit log: {str(e)}")
+        return False
+
+@app.route('/get_doctor_audit_logs', methods=['GET'])
+def get_doctor_audit_logs():
+    try:
+        doctor_hh_number = request.args.get('doctor_hh_number')
+        
+        if not doctor_hh_number:
+            return jsonify({"error": "Missing doctor_hh_number parameter"}), 400
+
+        # Verify doctor exists
+        is_registered = doctor_contract.functions.isDoctorRegistered(doctor_hh_number).call()
+        if not is_registered:
+            return jsonify({"error": "Doctor not registered"}), 404
+
+        # Get audit logs for the doctor
+        audit_logs = audit_contract.functions.getAuditLogsForEntity(doctor_hh_number).call()
+
+        # Process audit logs
+        processed_logs = []
+        for log in audit_logs:
+            # Convert action type from integer to string
+            action_type_map = {
+                0: "CREATE",
+                1: "UPDATE",
+                2: "VIEW",
+                3: "GRANT_ACCESS",
+                4: "REVOKE_ACCESS"
+            }
+            
+            action_type = action_type_map.get(log[1], "UNKNOWN")  # log[1] is actionType
+
+            processed_log = {
+                "entityId": log[0],           # Doctor HH number
+                "actionType": action_type,     # Converted action type
+                "performer": log[2],          # Address that performed the action
+                "timestamp": log[3],          # Timestamp of the action
+                "details": log[4]             # Additional details
+            }
+
+            # Add human-readable timestamp
+            processed_log["datetime"] = datetime.fromtimestamp(log[3]).strftime('%Y-%m-%d %H:%M:%S')
+            
+            processed_logs.append(processed_log)
+
+        # Sort logs by timestamp in descending order (most recent first)
+        processed_logs.sort(key=lambda x: x['timestamp'], reverse=True)
+
+        return jsonify({
+            "status": "success",
+            "doctor_hh_number": doctor_hh_number,
+            "audit_logs": processed_logs,
+            "total_logs": len(processed_logs)
+        })
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
     
 # Run the Flask app
 if __name__ == '__main__':
