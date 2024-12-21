@@ -100,7 +100,7 @@ with open('contract_doctor_abi.json', 'r') as abi_file:
     doctor_contract_abi = json.load(abi_file)
 
 # Contract address for the doctor contract (replace with actual address from Ganache)
-doctor_contract_address = '0xc3C601ff26F03FAfE84839Ac26b88a1D687EcFaF'
+doctor_contract_address = '0x17C77682272fA63e9B5bA1a50e1795d6d869212d'
 
 # Create contract instance for the doctor contract
 doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)
@@ -608,16 +608,36 @@ def update_doctor_info():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 400
     
-# Update the create_medical_record route
+# Add these helper functions to check transaction status and record existence
+def verify_medical_record_creation(doctor_contract, patient_hh_number, record_hash):
+    """Verify if a medical record was successfully created"""
+    try:
+        # Get all patient records
+        records = doctor_contract.functions.getPatientAllMedicalRecords(
+            patient_hh_number
+        ).call()
+        
+        # Check if the record exists
+        for record in records:
+            if record[2] == record_hash:  # record[2] is recordHash
+                return True
+        return False
+    except Exception as e:
+        print(f"Verification error: {str(e)}")
+        return False
+
+# Modify the create_medical_record route
 @app.route('/create_medical_record', methods=['POST'])
 def create_medical_record():
     try:
         # Check if IPFS node is running
         if not check_ipfs_node():
-            return jsonify({"error": "IPFS node is not running. Please start your IPFS daemon."}), 500
+            return jsonify({"error": "IPFS node is not running"}), 500
 
-        # Check if required fields are present
-        if 'file' not in request.files or not request.form.get('patient_hh_number') or not request.form.get('doctor_hh_number'):
+        # Validate input
+        if 'file' not in request.files or \
+           not request.form.get('patient_hh_number') or \
+           not request.form.get('doctor_hh_number'):
             return jsonify({"error": "Missing required fields"}), 400
 
         patient_hh_number = request.form.get('patient_hh_number')
@@ -625,28 +645,37 @@ def create_medical_record():
         notes = request.form.get('notes', '')
         file = request.files['file']
 
-        # Check if doctor has access
+        # Check doctor access
         has_access = doctor_contract.functions.checkPatientAccess(
             patient_hh_number,
             doctor_hh_number
         ).call()
 
         if not has_access:
-            return jsonify({"error": "Doctor does not have access to this patient's records"}), 403
+            return jsonify({"error": "Doctor does not have access"}), 403
 
-        # Read and encrypt the file
+        # Process file
         file_content = file.read()
-        
-        # Generate a unique file hash
         file_hash = hashlib.sha256(file_content).hexdigest()
-        
-        # Encrypt the file content
         encrypted_content = fernet.encrypt(file_content)
         
-        # Save encrypted file to IPFS and ensure it's pinned
-        ipfs_hash = ipfs_add_bytes(encrypted_content)
+        # IPFS storage with verification
+        max_ipfs_retries = 3
+        ipfs_hash = None
+        
+        for attempt in range(max_ipfs_retries):
+            try:
+                ipfs_hash = ipfs_add_bytes(encrypted_content)
+                # Verify IPFS storage
+                stored_content = ipfs_cat(ipfs_hash)
+                if stored_content == encrypted_content:
+                    break
+            except Exception as e:
+                if attempt == max_ipfs_retries - 1:
+                    raise Exception(f"Failed to store file in IPFS after {max_ipfs_retries} attempts")
+                continue
 
-        # Create encrypted metadata
+        # Create metadata
         metadata = {
             "filename": file.filename,
             "content_type": file.content_type,
@@ -655,18 +684,19 @@ def create_medical_record():
             "file_hash": file_hash
         }
         encrypted_metadata = fernet.encrypt(json.dumps(metadata).encode())
+
+        # Blockchain transaction with retry mechanism
+        max_blockchain_retries = 3
+        tx_hash = None
+        tx_receipt = None
         
-        # Get the account from the private key
         account = w3.eth.account.from_key(private_key)
         account_address = account.address
 
-        # Get the current nonce
-        nonce = w3.eth.get_transaction_count(account_address)
-
-        # Create medical record on blockchain with retry mechanism
-        max_retries = 3
-        for attempt in range(max_retries):
+        for attempt in range(max_blockchain_retries):
             try:
+                nonce = w3.eth.get_transaction_count(account_address)
+                
                 transaction = doctor_contract.functions.createMedicalRecord(
                     patient_hh_number,
                     doctor_hh_number,
@@ -677,18 +707,28 @@ def create_medical_record():
                     'from': account_address,
                     'gas': 2000000,
                     'gasPrice': w3.to_wei('20', 'gwei'),
-                    'nonce': nonce + attempt,  # Increment nonce for each retry
+                    'nonce': nonce + attempt,
                 })
 
                 signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
                 tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
                 tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-                
-                if tx_receipt.status == 1:  # Transaction successful
+
+                # Verify record creation
+                if verify_medical_record_creation(doctor_contract, patient_hh_number, file_hash):
                     break
+                else:
+                    raise Exception("Record creation verification failed")
+                    
             except Exception as e:
-                if attempt == max_retries - 1:  # Last attempt
-                    raise e
+                if attempt == max_blockchain_retries - 1:
+                    # If IPFS upload succeeded but blockchain failed, try to unpin the file
+                    if ipfs_hash:
+                        try:
+                            requests.post(f'{IPFS_API_BASE_URL}/pin/rm?arg={ipfs_hash}')
+                        except:
+                            pass
+                    raise Exception(f"Failed to create medical record after {max_blockchain_retries} attempts: {str(e)}")
                 continue
 
         return jsonify({

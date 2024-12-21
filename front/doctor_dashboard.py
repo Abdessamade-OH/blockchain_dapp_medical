@@ -11,6 +11,7 @@ import subprocess
 from datetime import datetime
 from PIL import Image, ImageTk
 import mimetypes
+import logging
 
 def add_medical_records_section(parent, doctor_info):
     records_frame = ctk.CTkFrame(parent)
@@ -350,14 +351,200 @@ def refresh_records_table(doctor_info, table_frame):
         ctk.CTkLabel(row_frame, text=record["notes"], width=120, anchor="w").pack(side="left", padx=5)
         ctk.CTkLabel(row_frame, text=date_str, width=120, anchor="w").pack(side="left", padx=5)
 
+        # Actions frame
+        actions_frame = ctk.CTkFrame(row_frame)
+        actions_frame.pack(side="left", padx=5)
+
         # View Button
         view_button = ctk.CTkButton(
-            row_frame,
+            actions_frame,
             text="View",
-            width=80,
+            width=60,
             command=lambda r=record: view_record(r, doctor_info)
         )
-        view_button.pack(side="left", padx=5)
+        view_button.pack(side="left", padx=2)
+
+        # Update Button
+        update_button = ctk.CTkButton(
+            actions_frame,
+            text="Update",
+            width=60,
+            command=lambda r=record: update_medical_record_dialog(r, doctor_info, lambda: refresh_records_table(doctor_info, table_frame))
+        )
+        update_button.pack(side="left", padx=2)
+
+def update_medical_record_dialog(record, doctor_info, refresh_callback=None):
+    """Create a dialog window for updating a medical record."""
+    dialog = customtkinter.CTkToplevel()
+    dialog.title("Update Medical Record")
+    dialog.geometry("500x600")
+    
+    # Main content frame
+    content_frame = ctk.CTkFrame(dialog)
+    content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    
+    # Current record info
+    info_frame = ctk.CTkFrame(content_frame)
+    info_frame.pack(fill="x", pady=10)
+    
+    ctk.CTkLabel(info_frame, text="Current Record Information:", font=("Arial", 14, "bold")).pack(anchor="w", pady=5)
+    ctk.CTkLabel(info_frame, text=f"Patient ID: {record['patient_hh_number']}").pack(anchor="w")
+    ctk.CTkLabel(info_frame, text=f"Current File: {record['filename']}").pack(anchor="w")
+    ctk.CTkLabel(info_frame, text=f"Record Hash: {record['record_hash'][:10]}...").pack(anchor="w")
+    
+    # Notes field
+    notes_label = ctk.CTkLabel(content_frame, text="Update Notes:")
+    notes_label.pack(anchor="w", pady=(10, 5))
+    
+    notes_entry = ctk.CTkTextbox(content_frame, height=100)
+    notes_entry.pack(fill="x", pady=(0, 10))
+    notes_entry.insert("1.0", record.get('notes', ''))
+    
+    # File selection
+    file_frame = ctk.CTkFrame(content_frame)
+    file_frame.pack(fill="x", pady=10)
+    
+    selected_file_label = ctk.CTkLabel(file_frame, text="No file selected")
+    selected_file_label.pack(side="left", padx=5)
+    
+    selected_file = {}
+    
+    def select_file():
+        file_types = [
+            ('PDF files', '*.pdf'),
+            ('Image files', '*.jpg;*.jpeg;*.png'),
+            ('Text files', '*.txt'),
+            ('All files', '*.*')
+        ]
+        
+        filename = filedialog.askopenfilename(
+            title="Select Updated Medical Record File",
+            filetypes=file_types
+        )
+        
+        if filename:
+            selected_file['path'] = filename
+            selected_file_label.configure(text=os.path.basename(filename))
+    
+    select_file_btn = ctk.CTkButton(
+        file_frame,
+        text="Select New File",
+        command=select_file
+    )
+    select_file_btn.pack(side="right", padx=5)
+    
+    # Preview frame for current record
+    preview_frame = ctk.CTkFrame(content_frame)
+    preview_frame.pack(fill="x", pady=10)
+    
+    ctk.CTkLabel(preview_frame, text="Current Record Preview:", font=("Arial", 12, "bold")).pack(anchor="w", pady=5)
+    
+    def view_current():
+        view_record(record, doctor_info)
+    
+    preview_btn = ctk.CTkButton(
+        preview_frame,
+        text="View Current Record",
+        command=view_current
+    )
+    preview_btn.pack(pady=5)
+    
+    # Status message
+    status_label = ctk.CTkLabel(content_frame, text="", text_color="gray")
+    status_label.pack(pady=5)
+    
+    def update_status(message, is_error=False):
+        status_label.configure(
+            text=message,
+            text_color="red" if is_error else "green"
+        )
+        if not is_error:
+            dialog.after(2000, dialog.destroy)
+            if refresh_callback:
+                refresh_callback()
+    
+    def submit_update():
+        files = None
+        try:
+            if 'path' not in selected_file:
+                update_status("Please select a file", True)
+                return
+            
+            # Prepare form data
+            form_data = {
+                'patient_hh_number': record['patient_hh_number'],
+                'doctor_hh_number': doctor_info['hhNumber'],
+                'old_file_hash': record['record_hash'],
+                'notes': notes_entry.get("1.0", "end-1c")
+            }
+            
+            # Show confirmation dialog
+            if not messagebox.askyesno("Confirm Update", 
+                "Are you sure you want to update this medical record? This action cannot be undone."):
+                return
+            
+            # Prepare file
+            files = {
+                'file': (
+                    os.path.basename(selected_file['path']),
+                    open(selected_file['path'], 'rb'),
+                    'application/octet-stream'
+                )
+            }
+            
+            # Show loading status
+            update_status("Updating medical record...")
+            
+            # Send to backend
+            response = requests.put(
+                "http://127.0.0.1:5000/update_medical_record",
+                data=form_data,
+                files=files
+            )
+            
+            if response.status_code == 200:
+                response_data = response.json()
+                success_message = (
+                    f"Medical record updated successfully\n"
+                    f"Old Hash: {record['record_hash'][:10]}...\n"
+                    f"New Hash: {response_data['data']['new_file_hash'][:10]}...\n"
+                    f"Transaction Hash: {response_data['data']['transaction_hash'][:10]}..."
+                )
+                update_status(success_message)
+                
+                # Log the update
+                logging.info(f"Medical record updated: {response_data['data']['new_file_hash']}")
+            else:
+                error_message = response.json().get('error', 'Failed to update medical record')
+                update_status(f"Error: {error_message}", True)
+                
+        except Exception as e:
+            update_status(f"Error: {str(e)}", True)
+            logging.error(f"Error updating medical record: {str(e)}")
+        finally:
+            # Safely close the file if it was opened
+            if files and 'file' in files:
+                try:
+                    files['file'][1].close()
+                except Exception:
+                    pass
+    
+    # Submit button
+    submit_btn = ctk.CTkButton(
+        content_frame,
+        text="Update Record",
+        command=submit_update
+    )
+    submit_btn.pack(pady=20)
+    
+    # Cancel button
+    cancel_btn = ctk.CTkButton(
+        content_frame,
+        text="Cancel",
+        command=dialog.destroy,
+        fg_color="gray"
+    )
+    cancel_btn.pack(pady=(0, 20))
 
 def fetch_doctor_patient_records(doctor_hh_number):
     if not doctor_hh_number:

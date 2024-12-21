@@ -341,7 +341,7 @@ contract ContractDoctor {
         return recordId;
     }
 
-    // Add this function to the ContractDoctor contract
+    // Update this function in the ContractDoctor contract
     function updateMedicalRecord(
         string memory _patientHhNumber,
         string memory _doctorHhNumber,
@@ -367,11 +367,24 @@ contract ContractDoctor {
                     "Only the creator can update the record"
                 );
                 
-                // Update the record
-                record.recordHash = _newRecordHash;
-                record.notes = _notes;
-                record.encryptedData = _encryptedData;
-                record.timestamp = block.timestamp;
+                // Mark the old record as deleted
+                record.isDeleted = true;
+                
+                // Create a new record with updated information
+                MedicalRecord memory newRecord = MedicalRecord({
+                    patientHhNumber: _patientHhNumber,
+                    doctorHhNumber: _doctorHhNumber,
+                    recordHash: _newRecordHash,
+                    notes: _notes,
+                    encryptedData: _encryptedData,
+                    timestamp: block.timestamp,
+                    isDeleted: false
+                });
+                
+                // Add the new record
+                medicalRecords.push(newRecord);
+                uint256 newRecordId = medicalRecords.length - 1;
+                patientRecords[_patientHhNumber].push(newRecordId);
                 
                 recordFound = true;
                 break;
