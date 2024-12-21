@@ -698,9 +698,6 @@ def guess_extension(content_type):
     except Exception:
         return '.tmp'  # Default extension if something goes wrong
 
-def audit_logs_section(parent, doctor_info):
-    pass
-
 def update_patient_results(results_frame, patient_data):
     # Clear existing content
     for widget in results_frame.winfo_children():
@@ -779,6 +776,179 @@ def request_patient_access(patient_hh, doctor_hh):
             show_message("Error", "Failed to send access request")
     except requests.exceptions.RequestException as e:
         show_message("Error", f"Failed to request access: {str(e)}")
+
+def audit_logs_section(parent, doctor_info):
+    """Create the audit logs section in the doctor's dashboard."""
+    logs_frame = ctk.CTkFrame(parent)
+    logs_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+    # Header
+    header_frame = ctk.CTkFrame(logs_frame)
+    header_frame.pack(fill="x", pady=(0, 10))
+    
+    ctk.CTkLabel(
+        header_frame,
+        text="Medical Records Audit Logs",
+        font=("Arial", 16, "bold")
+    ).pack(side="left", padx=10)
+
+    refresh_button = ctk.CTkButton(
+        header_frame,
+        text="Refresh Logs",
+        width=100,
+        command=lambda: refresh_audit_logs(doctor_info, table_frame)
+    )
+    refresh_button.pack(side="right", padx=10)
+
+    # Filters frame
+    filters_frame = ctk.CTkFrame(logs_frame)
+    filters_frame.pack(fill="x", pady=(0, 10))
+
+    # Action type filter
+    action_types = ["All Actions", "CREATE", "UPDATE", "VIEW", "GRANT_ACCESS", "REVOKE_ACCESS"]
+    action_var = customtkinter.StringVar(value="All Actions")
+    
+    ctk.CTkLabel(
+        filters_frame,
+        text="Filter by Action:",
+        anchor="w"
+    ).pack(side="left", padx=(10, 5))
+    
+    action_dropdown = ctk.CTkOptionMenu(
+        filters_frame,
+        values=action_types,
+        variable=action_var,
+        command=lambda _: refresh_audit_logs(doctor_info, table_frame, action_filter=action_var.get())
+    )
+    action_dropdown.pack(side="left", padx=5)
+
+    # Date range filter
+    date_frame = ctk.CTkFrame(filters_frame)
+    date_frame.pack(side="right", padx=10)
+    
+    ctk.CTkLabel(
+        date_frame,
+        text="Date Range:",
+        anchor="w"
+    ).pack(side="left", padx=5)
+
+    # Create table frame
+    table_frame = ctk.CTkScrollableFrame(logs_frame, height=400)
+    table_frame.pack(fill="both", expand=True, pady=5)
+
+    # Initial load of audit logs
+    refresh_audit_logs(doctor_info, table_frame)
+
+def refresh_audit_logs(doctor_info, table_frame, action_filter="All Actions"):
+    """Refresh the audit logs table with current data."""
+    # Clear existing table
+    for widget in table_frame.winfo_children():
+        widget.destroy()
+
+    try:
+        # Fetch audit logs from backend
+        response = requests.get(
+            "http://127.0.0.1:5000/get_doctor_audit_logs",
+            params={"doctor_hh_number": doctor_info["hhNumber"]}
+        )
+
+        if response.status_code != 200:
+            show_error_message(table_frame, "Failed to fetch audit logs")
+            return
+
+        logs_data = response.json()
+        audit_logs = logs_data.get("audit_logs", [])
+
+        if not audit_logs:
+            show_empty_message(table_frame)
+            return
+
+        # Filter logs if action filter is set
+        if action_filter != "All Actions":
+            audit_logs = [log for log in audit_logs if log["actionType"] == action_filter]
+
+        # Create headers
+        headers = ["Timestamp", "Action", "Details", "Performer"]
+        header_frame = ctk.CTkFrame(table_frame)
+        header_frame.pack(fill="x", pady=(0, 5))
+
+        for header in headers:
+            ctk.CTkLabel(
+                header_frame,
+                text=header,
+                font=("Arial", 12, "bold"),
+                width=150,
+                anchor="w"
+            ).pack(side="left", padx=5)
+
+        # Add log entries
+        for log in audit_logs:
+            row_frame = ctk.CTkFrame(table_frame)
+            row_frame.pack(fill="x", pady=2)
+
+            # Timestamp
+            ctk.CTkLabel(
+                row_frame,
+                text=log["datetime"],
+                width=150,
+                anchor="w"
+            ).pack(side="left", padx=5)
+
+            # Action
+            action_label = ctk.CTkLabel(
+                row_frame,
+                text=log["actionType"],
+                width=150,
+                anchor="w"
+            )
+            action_label.pack(side="left", padx=5)
+
+            # Color-code action types
+            action_colors = {
+                "CREATE": "green",
+                "UPDATE": "orange",
+                "VIEW": "blue",
+                "GRANT_ACCESS": "purple",
+                "REVOKE_ACCESS": "red"
+            }
+            action_label.configure(text_color=action_colors.get(log["actionType"], "gray"))
+
+            # Details
+            ctk.CTkLabel(
+                row_frame,
+                text=log["details"],
+                width=150,
+                anchor="w"
+            ).pack(side="left", padx=5)
+
+            # Performer (truncated address)
+            performer = f"{log['performer'][:6]}...{log['performer'][-4:]}"
+            ctk.CTkLabel(
+                row_frame,
+                text=performer,
+                width=150,
+                anchor="w"
+            ).pack(side="left", padx=5)
+
+    except Exception as e:
+        show_error_message(table_frame, f"Error loading audit logs: {str(e)}")
+
+def show_error_message(parent, message):
+    """Display error message in the table frame."""
+    ctk.CTkLabel(
+        parent,
+        text=message,
+        text_color="red",
+        font=("Arial", 14)
+    ).pack(pady=20)
+
+def show_empty_message(parent):
+    """Display message when no logs are available."""
+    ctk.CTkLabel(
+        parent,
+        text="No audit logs available",
+        font=("Arial", 14)
+    ).pack(pady=20)
 
 def view_medical_records(patient_hh):
     # This function would be implemented to show medical records
