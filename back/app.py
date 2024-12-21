@@ -1187,6 +1187,101 @@ def get_doctor_audit_logs():
             "status": "error",
             "error": str(e)
         }), 500
+
+# New route to get patient audit logs
+@app.route('/get_patient_audit_logs', methods=['GET'])
+def get_patient_audit_logs():
+    try:
+        patient_hh_number = request.args.get('patient_hh_number')
+        
+        if not patient_hh_number:
+            return jsonify({"error": "Missing patient_hh_number parameter"}), 400
+
+        # Verify patient exists
+        try:
+            patient_details = patient_contract.functions.getPatientDetails(patient_hh_number).call()
+            if not patient_details[0]:  # Check if wallet address is empty
+                return jsonify({"error": "Patient not registered"}), 404
+        except Exception as e:
+            return jsonify({"error": "Patient not registered"}), 404
+
+        # Get audit logs where the details JSON contains this patient's HH number
+        all_audit_logs = []
+        
+        # Get doctors who have/had access to this patient
+        doctors = doctor_contract.functions.getDoctorsWithAccess(patient_hh_number).call()
+        
+        # Collect audit logs for each doctor
+        for doctor_hh_number in doctors:
+            doctor_logs = audit_contract.functions.getAuditLogsForEntity(doctor_hh_number).call()
+            
+            # Filter logs to only include those related to this patient
+            for log in doctor_logs:
+                try:
+                    details = json.loads(log[4])  # Parse the details JSON
+                    # Check if this log is related to the patient
+                    if ('patient' in details and details['patient'] == patient_hh_number) or \
+                       ('patient_hh_number' in details and details['patient_hh_number'] == patient_hh_number):
+                        
+                        # Get doctor details for more context
+                        doctor_details = doctor_contract.functions.getDoctorDetails(doctor_hh_number).call()
+                        doctor_name = doctor_details[1]  # Get doctor's name
+                        
+                        # Convert action type from integer to string
+                        action_type_map = {
+                            0: "CREATE",
+                            1: "UPDATE",
+                            2: "VIEW",
+                            3: "GRANT_ACCESS",
+                            4: "REVOKE_ACCESS"
+                        }
+                        
+                        action_type = action_type_map.get(log[1], "UNKNOWN")
+                        
+                        processed_log = {
+                            "doctorId": doctor_hh_number,
+                            "doctorName": doctor_name,
+                            "actionType": action_type,
+                            "performer": log[2],
+                            "timestamp": log[3],
+                            "details": log[4],
+                            "datetime": datetime.fromtimestamp(log[3]).strftime('%Y-%m-%d %H:%M:%S')
+                        }
+                        
+                        # Add additional context based on action type
+                        if action_type == "CREATE":
+                            processed_log["action_description"] = f"Dr. {doctor_name} created a new medical record"
+                        elif action_type == "UPDATE":
+                            processed_log["action_description"] = f"Dr. {doctor_name} updated a medical record"
+                        elif action_type == "VIEW":
+                            processed_log["action_description"] = f"Dr. {doctor_name} viewed a medical record"
+                        elif action_type == "GRANT_ACCESS":
+                            processed_log["action_description"] = f"Access granted to Dr. {doctor_name}"
+                        elif action_type == "REVOKE_ACCESS":
+                            processed_log["action_description"] = f"Access revoked from Dr. {doctor_name}"
+                        
+                        all_audit_logs.append(processed_log)
+                except json.JSONDecodeError:
+                    continue  # Skip logs with invalid JSON details
+                except Exception as e:
+                    print(f"Error processing log: {str(e)}")
+                    continue
+
+        # Sort logs by timestamp in descending order (most recent first)
+        all_audit_logs.sort(key=lambda x: x['timestamp'], reverse=True)
+
+        return jsonify({
+            "status": "success",
+            "patient_hh_number": patient_hh_number,
+            "audit_logs": all_audit_logs,
+            "total_logs": len(all_audit_logs)
+        })
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
     
 # Run the Flask app
 if __name__ == '__main__':
