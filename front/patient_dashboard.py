@@ -19,16 +19,34 @@ def show_patient_dashboard(app, patient_info):
     # Dashboard Header
     header_frame = customtkinter.CTkFrame(app, height=80, fg_color="#EAF6F6")
     header_frame.pack(fill="x", pady=10)
+    
     welcome_label = customtkinter.CTkLabel(
         header_frame, 
         text=f"Welcome, {patient_info.get('name', 'Patient')}", 
         font=("Arial", 24)
     )
     welcome_label.pack(side="left", padx=20)
+
+    def handle_logout():
+        # Show confirmation dialog
+        confirm = messagebox.askyesno(
+            "Confirm Logout",
+            "Are you sure you want to logout?"
+        )
+        if confirm:
+            # Clear any session data or cookies if needed
+            # patient_info.clear()  # Clear patient info if needed
+            
+            # Import the show_auth_page function at the top of your file
+            from auth import show_auth_page  # Assuming auth_page.py contains show_auth_page
+            
+            # Return to auth page
+            show_auth_page(app)
+
     logout_button = customtkinter.CTkButton(
         header_frame, 
         text="Logout", 
-        command=lambda: app.destroy()
+        command=handle_logout
     )
     logout_button.pack(side="right", padx=20)
 
