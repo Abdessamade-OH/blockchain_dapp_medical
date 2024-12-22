@@ -11,6 +11,12 @@ import base64
 from datetime import datetime
 import hashlib
 import requests
+import time
+from typing import Optional, Dict, Set
+import json
+import os
+from threading import Lock
+import threading
 
 # IPFS API configuration
 IPFS_API_BASE_URL = 'http://127.0.0.1:5001/api/v0'
@@ -19,55 +25,181 @@ IPFS_API_BASE_URL = 'http://127.0.0.1:5001/api/v0'
 encryption_key = Fernet.generate_key()
 fernet = Fernet(encryption_key)
 
-# Update these IPFS functions
-def ipfs_add_bytes(content):
-    try:
-        files = {
-            'file': content
-        }
-        # Add the file to IPFS
-        response = requests.post(f'{IPFS_API_BASE_URL}/add', files=files)
-        if response.status_code != 200:
-            raise Exception(f"Failed to add to IPFS: {response.text}")
+# Cache for tracking pinned hashes
+class PinningCache:
+    def __init__(self, cache_file: str = 'pinned_hashes.json'):
+        self.cache_file = cache_file
+        self.pinned_hashes: Set[str] = set()
+        self.lock = Lock()
+        self._load_cache()
         
-        # Get the hash from the response
-        ipfs_hash = response.json()['Hash']
-        
-        # Pin the file to make it persistent
-        pin_response = requests.post(f'{IPFS_API_BASE_URL}/pin/add?arg={ipfs_hash}')
-        if pin_response.status_code != 200:
-            raise Exception(f"Failed to pin file: {pin_response.text}")
+        # Start background pin verification thread
+        self.verify_thread = threading.Thread(target=self._verify_pins_periodically, daemon=True)
+        self.verify_thread.start()
+    
+    def _load_cache(self):
+        try:
+            if os.path.exists(self.cache_file):
+                with open(self.cache_file, 'r') as f:
+                    self.pinned_hashes = set(json.load(f))
+        except Exception as e:
+            print(f"Error loading pin cache: {e}")
+            self.pinned_hashes = set()
+    
+    def _save_cache(self):
+        try:
+            with open(self.cache_file, 'w') as f:
+                json.dump(list(self.pinned_hashes), f)
+        except Exception as e:
+            print(f"Error saving pin cache: {e}")
+    
+    def add(self, hash_value: str):
+        with self.lock:
+            self.pinned_hashes.add(hash_value)
+            self._save_cache()
+    
+    def remove(self, hash_value: str):
+        with self.lock:
+            self.pinned_hashes.discard(hash_value)
+            self._save_cache()
+    
+    def is_pinned(self, hash_value: str) -> bool:
+        return hash_value in self.pinned_hashes
+    
+    def _verify_pins_periodically(self):
+        while True:
+            self._verify_all_pins()
+            time.sleep(3600)  # Verify pins every hour
+    
+    def _verify_all_pins(self):
+        with self.lock:
+            hashes_to_remove = set()
+            for hash_value in self.pinned_hashes:
+                try:
+                    response = requests.post(f'{IPFS_API_BASE_URL}/pin/ls?arg={hash_value}')
+                    if response.status_code != 200:
+                        print(f"Hash {hash_value} is no longer pinned, re-pinning...")
+                        pin_response = requests.post(f'{IPFS_API_BASE_URL}/pin/add?arg={hash_value}')
+                        if pin_response.status_code != 200:
+                            hashes_to_remove.add(hash_value)
+                except Exception as e:
+                    print(f"Error verifying pin for {hash_value}: {e}")
             
-        return ipfs_hash
-    except Exception as e:
-        raise Exception(f"IPFS add error: {str(e)}")
+            # Remove any hashes that couldn't be re-pinned
+            for hash_value in hashes_to_remove:
+                self.pinned_hashes.discard(hash_value)
+            if hashes_to_remove:
+                self._save_cache()
 
-def ipfs_cat(hash_value):
-    try:
-        # First verify the file is pinned
-        pin_ls_response = requests.post(f'{IPFS_API_BASE_URL}/pin/ls?arg={hash_value}')
-        if pin_ls_response.status_code != 200:
-            # If not pinned, try to pin it
+# Initialize the pinning cache
+pinning_cache = PinningCache()
+
+def ipfs_add_bytes(content: bytes, retries: int = 3, retry_delay: float = 1.0) -> str:
+    """
+    Add content to IPFS with automatic pinning and retry logic.
+    
+    Args:
+        content: The bytes content to add to IPFS
+        retries: Number of retry attempts
+        retry_delay: Delay between retries in seconds
+    
+    Returns:
+        str: IPFS hash of the added content
+    """
+    last_error = None
+    
+    for attempt in range(retries):
+        try:
+            # Add the file to IPFS
+            files = {'file': content}
+            response = requests.post(f'{IPFS_API_BASE_URL}/add', files=files)
+            if response.status_code != 200:
+                raise Exception(f"Failed to add to IPFS: {response.text}")
+            
+            ipfs_hash = response.json()['Hash']
+            
+            # Pin the file and add to cache
+            pin_response = requests.post(f'{IPFS_API_BASE_URL}/pin/add?arg={ipfs_hash}')
+            if pin_response.status_code != 200:
+                raise Exception(f"Failed to pin file: {pin_response.text}")
+            
+            pinning_cache.add(ipfs_hash)
+            
+            # Verify the content was stored correctly
+            stored_content = ipfs_cat(ipfs_hash)
+            if stored_content != content:
+                raise Exception("Content verification failed")
+            
+            return ipfs_hash
+            
+        except Exception as e:
+            last_error = e
+            if attempt < retries - 1:
+                time.sleep(retry_delay)
+                continue
+            raise Exception(f"Failed to add content to IPFS after {retries} attempts: {str(last_error)}")
+
+def ipfs_cat(hash_value: str, retries: int = 3, retry_delay: float = 1.0) -> Optional[bytes]:
+    """
+    Retrieve content from IPFS with automatic re-pinning and retry logic.
+    
+    Args:
+        hash_value: The IPFS hash to retrieve
+        retries: Number of retry attempts
+        retry_delay: Delay between retries in seconds
+    
+    Returns:
+        bytes: The retrieved content
+    """
+    last_error = None
+    
+    for attempt in range(retries):
+        try:
+            # Check if hash is in our pinning cache
+            if not pinning_cache.is_pinned(hash_value):
+                # Try to pin the hash
+                pin_response = requests.post(f'{IPFS_API_BASE_URL}/pin/add?arg={hash_value}')
+                if pin_response.status_code == 200:
+                    pinning_cache.add(hash_value)
+            
+            # Get the file content
+            response = requests.post(f'{IPFS_API_BASE_URL}/cat?arg={hash_value}')
+            if response.status_code == 200:
+                return response.content
+            
+            # If we couldn't get the content, try to re-pin
             pin_response = requests.post(f'{IPFS_API_BASE_URL}/pin/add?arg={hash_value}')
             if pin_response.status_code != 200:
-                print(f"Warning: Could not pin file {hash_value}")
-        
-        # Get the file content
-        response = requests.post(f'{IPFS_API_BASE_URL}/cat?arg={hash_value}')
-        if response.status_code == 200:
-            return response.content
-        else:
-            raise Exception(f"Failed to get from IPFS: {response.text}")
-    except Exception as e:
-        raise Exception(f"IPFS cat error: {str(e)}")
+                raise Exception(f"Failed to re-pin file: {pin_response.text}")
+            
+        except Exception as e:
+            last_error = e
+            if attempt < retries - 1:
+                time.sleep(retry_delay)
+                continue
+            raise Exception(f"Failed to retrieve content from IPFS after {retries} attempts: {str(last_error)}")
 
-# Add this new function to check IPFS node status
-def check_ipfs_node():
+def check_ipfs_node() -> bool:
+    """
+    Check if the IPFS node is running and accessible.
+    
+    Returns:
+        bool: True if the node is running and accessible, False otherwise
+    """
     try:
         response = requests.post(f'{IPFS_API_BASE_URL}/id')
         return response.status_code == 200
     except:
         return False
+
+def get_pinned_hashes() -> Set[str]:
+    """
+    Get the set of currently pinned hashes.
+    
+    Returns:
+        Set[str]: Set of pinned IPFS hashes
+    """
+    return set(pinning_cache.pinned_hashes)
 
 
 # Load environment variables from .env file
@@ -100,7 +232,7 @@ with open('contract_doctor_abi.json', 'r') as abi_file:
     doctor_contract_abi = json.load(abi_file)
 
 # Contract address for the doctor contract (replace with actual address from Ganache)
-doctor_contract_address = '0x17C77682272fA63e9B5bA1a50e1795d6d869212d'
+doctor_contract_address = '0x2538074e1567Dc526e1a30ec8EBBc87377c5EDD2'
 
 # Create contract instance for the doctor contract
 doctor_contract = w3.eth.contract(address=doctor_contract_address, abi=doctor_contract_abi)

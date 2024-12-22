@@ -7,7 +7,7 @@ def main():
 
     # Set fixed window size
     app.geometry("900x680")
-    app.resizable(False, False)
+    app.resizable(True, False)
 
     # Initialize the application with the auth screen
     show_auth_page(app)
