@@ -968,6 +968,7 @@ def get_medical_record_file():
         ipfs_hash = request.args.get('ipfs_hash')
         patient_hh_number = request.args.get('patient_hh_number')
         doctor_hh_number = request.args.get('doctor_hh_number')
+        content_type = request.args.get('content_type', 'application/octet-stream')
 
         if not ipfs_hash or not patient_hh_number:
             return jsonify({"error": "Missing required parameters"}), 400
@@ -998,7 +999,7 @@ def get_medical_record_file():
             create_audit_log(doctor_hh_number, 2, audit_details)  # 2 for VIEW action
 
         return decrypted_content, 200, {
-            'Content-Type': 'application/octet-stream',
+            'Content-Type': content_type,  # Use the original content type
             'Content-Disposition': f'attachment; filename=medical_record_{ipfs_hash}'
         }
 

@@ -234,17 +234,16 @@ def fetch_patient_records(patient_hh_number):
 
 def view_record(record, patient_info):
     try:
-        # Prepare the request parameters
+        # Prepare the request parameters with content type
         params = {
             "ipfs_hash": record["ipfs_hash"],
-            "patient_hh_number": patient_info.get("hhNumber")
+            "patient_hh_number": patient_info.get("hhNumber"),
+            "content_type": record["content_type"]  # Pass the content type
         }
         
-        # Only add doctor_hh_number if it exists and is not empty
         if patient_info.get("doctorHhNumber"):
             params["doctor_hh_number"] = patient_info.get("doctorHhNumber")
         
-        # Get the file content from the API
         response = requests.get(
             "http://127.0.0.1:5000/get_medical_record_file",
             params=params,
@@ -256,23 +255,43 @@ def view_record(record, patient_info):
             messagebox.showerror("Error", f"Failed to fetch record: {error_msg}")
             return
 
-        # Create a temporary file with appropriate extension
-        ext = guess_extension(record["content_type"]) or '.tmp'
+        # Enhanced extension guessing
+        content_type = record["content_type"]
+        ext = guess_extension(content_type)
+        if ext == '' or ext == '.tmp':
+            # Fallback to extension from filename if available
+            filename = record["filename"]
+            if '.' in filename:
+                ext = '.' + filename.split('.')[-1]
+        
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tf:
-            # Write the decrypted content to the temporary file
             for chunk in response.iter_content(chunk_size=8192):
                 tf.write(chunk)
             tf.flush()
             
-            # Open the file based on the content type
-            if record["content_type"].startswith("image/"):
-                show_image_viewer(tf.name, record["filename"])
-            elif record["content_type"].startswith("text/"):
-                show_text_viewer(tf.name, record["filename"])
-            elif record["content_type"].startswith("application/pdf"):
-                open_pdf(tf.name)
+            # Enhanced content type handling
+            if content_type.startswith(("image/", "application/pdf", "text/")):
+                if content_type.startswith("image/"):
+                    show_image_viewer(tf.name, record["filename"])
+                elif content_type.startswith("application/pdf"):
+                    open_pdf(tf.name)
+                elif content_type.startswith("text/"):
+                    show_text_viewer(tf.name, record["filename"])
             else:
-                open_with_system_default(tf.name)
+                # If content type is octet-stream, try to guess from filename
+                if content_type == "application/octet-stream":
+                    filename = record["filename"].lower()
+                    if filename.endswith(('.pdf', '.PDF')):
+                        open_pdf(tf.name)
+                    elif filename.endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                        show_image_viewer(tf.name, record["filename"])
+                    elif filename.endswith(('.txt', '.text', '.md')):
+                        show_text_viewer(tf.name, record["filename"])
+                    else:
+                        open_with_system_default(tf.name)
+                else:
+                    open_with_system_default(tf.name)
+
     except requests.RequestException as e:
         messagebox.showerror("Error", f"Network error: {str(e)}")
     except IOError as e:
@@ -361,11 +380,16 @@ def guess_extension(content_type):
             'text/html': '.html',
             'application/pdf': '.pdf',
             'application/json': '.json',
-            'application/xml': '.xml'
+            'application/xml': '.xml',
+            'application/octet-stream': '',  # Handle octet-stream specially
+            'application/msword': '.doc',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+            'application/vnd.ms-excel': '.xls',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx'
         }
         return extensions.get(content_type.lower(), '')
     except Exception:
-        return '.tmp'  # Default extension if something goes wrong
+        return ''  # Return empty string instead of .tmp
 
 def create_access_management_section(parent, patient_info):
     access_frame = customtkinter.CTkFrame(parent)
