@@ -6,7 +6,7 @@ def main():
     app = customtkinter.CTk()
 
     # Set fixed window size
-    app.geometry("900x680")
+    app.geometry("1000x680")
     app.resizable(True, False)
 
     # Initialize the application with the auth screen
