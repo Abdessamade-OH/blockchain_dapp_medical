@@ -29,7 +29,7 @@ def login_doctor_to_backend(login_frame, app):
         if response.status_code == 200:
             result = response.json()
             if result.get("status") == "success":
-                show_message(login_frame, "Login successful!", "#00C853")
+                show_message(login_frame, "Login successful!", "#22c55e")
 
                 hh_number = data.get("hh_number")
                 doctor_details_url = f"http://127.0.0.1:5000/get_doctor_details?hh_number={hh_number}"
@@ -56,8 +56,18 @@ def show_login_doctor_page(app, auth_page_callback):
     app.grid_columnconfigure(1, weight=1)
     app.grid_rowconfigure(0, weight=1)
 
+    # Set color scheme to match the patient page
+    COLORS = {
+        'primary': "#2563eb",      # Blue
+        'secondary': "#f8fafc",    # Light gray
+        'accent': "#3b82f6",       # Lighter blue
+        'text': "#1e293b",         # Dark gray
+        'success': "#22c55e",      # Green
+        'warning': "#f59e0b"       # Orange
+    }
+
     # Main container with gradient background
-    login_frame = customtkinter.CTkFrame(app, fg_color=("#E3F2FD", "#1A237E"))
+    login_frame = customtkinter.CTkFrame(app, fg_color=("white", COLORS['secondary']))
     login_frame.grid(row=0, column=0, columnspan=2, sticky="nsew")
     login_frame.grid_columnconfigure(0, weight=1)
     login_frame.grid_columnconfigure(1, weight=1)
@@ -72,7 +82,7 @@ def show_login_doctor_page(app, auth_page_callback):
         left_frame,
         text="Welcome Doctor!\nPlease Login to Continue",
         font=customtkinter.CTkFont(family="Helvetica", size=32, weight="bold"),
-        text_color=("#1A237E", "white")
+        text_color=COLORS['primary']
     )
     welcome_label.pack(pady=(20, 10))
 
@@ -81,13 +91,13 @@ def show_login_doctor_page(app, auth_page_callback):
         left_frame,
         text="Access your medical practice portal securely",
         font=customtkinter.CTkFont(family="Helvetica", size=16),
-        text_color=("#1A237E", "white")
+        text_color=COLORS['text']
     )
     subtitle_label.pack(pady=(0, 20))
 
     # Image display
     try:
-        image = Image.open("assets/login_img.jpg")  # Make sure to use appropriate image
+        image = Image.open("assets/login_img.jpg")
         image = image.resize((600, 600), Image.Resampling.LANCZOS)
         app.login_image = ImageTk.PhotoImage(image)
         
@@ -103,7 +113,7 @@ def show_login_doctor_page(app, auth_page_callback):
     # Right side frame for login form
     right_frame = customtkinter.CTkFrame(
         login_frame,
-        fg_color=("white", "#0A1929"),
+        fg_color=("white", COLORS['primary']),
         corner_radius=15
     )
     right_frame.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
@@ -113,7 +123,7 @@ def show_login_doctor_page(app, auth_page_callback):
         right_frame,
         text="Doctor Login",
         font=customtkinter.CTkFont(family="Helvetica", size=24, weight="bold"),
-        text_color=("#1A237E", "white")
+        text_color=COLORS['text']
     )
     login_title.pack(pady=(40, 30))
 
@@ -146,20 +156,20 @@ def show_login_doctor_page(app, auth_page_callback):
     )
     password_entry.pack(pady=10)
 
-    # Login button
+    # Login button with updated color scheme
     login_button = customtkinter.CTkButton(
         form_frame,
         text="Login",
         font=customtkinter.CTkFont(size=14),
         corner_radius=8,
         height=45,
-        fg_color=("#1565C0", "#42A5F5"),
-        hover_color=("#0D47A1", "#1976D2"),
+        fg_color=COLORS['primary'],
+        hover_color=COLORS['accent'],
         command=lambda: login_doctor_to_backend(form_frame, app)
     )
     login_button.pack(pady=(20, 10))
 
-    # Back button
+    # Back button with updated color scheme
     back_button = customtkinter.CTkButton(
         form_frame,
         text="Back to Main Menu",
@@ -168,9 +178,9 @@ def show_login_doctor_page(app, auth_page_callback):
         height=45,
         fg_color="transparent",
         border_width=2,
-        border_color=("#1565C0", "#42A5F5"),
-        hover_color=("#E3F2FD", "#1A237E"),
-        text_color=("#1565C0", "#42A5F5"),
+        border_color=COLORS['primary'],
+        hover_color=COLORS['secondary'],
+        text_color=COLORS['primary'],
         command=lambda: auth_page_callback(app)
     )
     back_button.pack(pady=10)

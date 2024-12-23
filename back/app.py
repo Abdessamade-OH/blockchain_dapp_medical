@@ -12,11 +12,13 @@ from datetime import datetime
 import hashlib
 import requests
 import time
-from typing import Optional, Dict, Set
 import json
 import os
 from threading import Lock
 import threading
+from typing import Optional, Dict, Set, List, Tuple
+import base64
+
 
 # IPFS API configuration
 IPFS_API_BASE_URL = 'http://127.0.0.1:5001/api/v0'
@@ -25,183 +27,200 @@ IPFS_API_BASE_URL = 'http://127.0.0.1:5001/api/v0'
 encryption_key = Fernet.generate_key()
 fernet = Fernet(encryption_key)
 
-# Cache for tracking pinned hashes
-class PinningCache:
-    def __init__(self, cache_file: str = 'pinned_hashes.json'):
-        self.cache_file = cache_file
-        self.pinned_hashes: Set[str] = set()
-        self.lock = Lock()
-        self._load_cache()
+# Pinata configuration
+PINATA_API_KEY = "1d4e98ae316ec67e0147"  # Replace with your actual Pinata API key
+PINATA_SECRET_API_KEY = "eee12cb52ec621fd5ca6c4db72b297018aa448d26427d1b4b0d6c0e1b41ec1f9"  # Replace with your actual Pinata secret key
+PINATA_BASE_URL = "https://api.pinata.cloud"
+
+class PinataIPFSManager:
+    def __init__(self):
+        self.headers = {
+            'pinata_api_key': PINATA_API_KEY,
+            'pinata_secret_api_key': PINATA_SECRET_API_KEY
+        }
         
-        # Start background pin verification thread
-        self.verify_thread = threading.Thread(target=self._verify_pins_periodically, daemon=True)
-        self.verify_thread.start()
-    
-    def _load_cache(self):
+    def pin_to_ipfs(self, content: bytes) -> str:
+        """
+        Pin content to IPFS using Pinata.
+        Returns the IPFS hash (CID) of the pinned content.
+        """
         try:
-            if os.path.exists(self.cache_file):
-                with open(self.cache_file, 'r') as f:
-                    self.pinned_hashes = set(json.load(f))
-        except Exception as e:
-            print(f"Error loading pin cache: {e}")
-            self.pinned_hashes = set()
-    
-    def _save_cache(self):
-        try:
-            with open(self.cache_file, 'w') as f:
-                json.dump(list(self.pinned_hashes), f)
-        except Exception as e:
-            print(f"Error saving pin cache: {e}")
-    
-    def add(self, hash_value: str):
-        with self.lock:
-            self.pinned_hashes.add(hash_value)
-            self._save_cache()
-    
-    def remove(self, hash_value: str):
-        with self.lock:
-            self.pinned_hashes.discard(hash_value)
-            self._save_cache()
-    
-    def is_pinned(self, hash_value: str) -> bool:
-        return hash_value in self.pinned_hashes
-    
-    def _verify_pins_periodically(self):
-        while True:
-            self._verify_all_pins()
-            time.sleep(3600)  # Verify pins every hour
-    
-    def _verify_all_pins(self):
-        with self.lock:
-            hashes_to_remove = set()
-            for hash_value in self.pinned_hashes:
-                try:
-                    response = requests.post(f'{IPFS_API_BASE_URL}/pin/ls?arg={hash_value}')
-                    if response.status_code != 200:
-                        print(f"Hash {hash_value} is no longer pinned, re-pinning...")
-                        pin_response = requests.post(f'{IPFS_API_BASE_URL}/pin/add?arg={hash_value}')
-                        if pin_response.status_code != 200:
-                            hashes_to_remove.add(hash_value)
-                except Exception as e:
-                    print(f"Error verifying pin for {hash_value}: {e}")
+            url = f"{PINATA_BASE_URL}/pinning/pinFileToIPFS"
+            files = {
+                'file': content
+            }
             
-            # Remove any hashes that couldn't be re-pinned
-            for hash_value in hashes_to_remove:
-                self.pinned_hashes.discard(hash_value)
-            if hashes_to_remove:
-                self._save_cache()
-
-# Initialize the pinning cache
-pinning_cache = PinningCache()
-
-def ipfs_add_bytes(content: bytes, retries: int = 3, retry_delay: float = 1.0) -> str:
-    """
-    Add content to IPFS with automatic pinning and retry logic.
-    
-    Args:
-        content: The bytes content to add to IPFS
-        retries: Number of retry attempts
-        retry_delay: Delay between retries in seconds
-    
-    Returns:
-        str: IPFS hash of the added content
-    """
-    last_error = None
-    
-    for attempt in range(retries):
-        try:
-            # Add the file to IPFS
-            files = {'file': content}
-            response = requests.post(f'{IPFS_API_BASE_URL}/add', files=files)
+            response = requests.post(
+                url,
+                files=files,
+                headers=self.headers
+            )
+            
             if response.status_code != 200:
-                raise Exception(f"Failed to add to IPFS: {response.text}")
-            
-            ipfs_hash = response.json()['Hash']
-            
-            # Pin the file and add to cache
-            pin_response = requests.post(f'{IPFS_API_BASE_URL}/pin/add?arg={ipfs_hash}')
-            if pin_response.status_code != 200:
-                raise Exception(f"Failed to pin file: {pin_response.text}")
-            
-            pinning_cache.add(ipfs_hash)
-            
-            # Verify the content was stored correctly
-            stored_content = ipfs_cat(ipfs_hash)
-            if stored_content != content:
-                raise Exception("Content verification failed")
-            
-            return ipfs_hash
+                raise Exception(f"Failed to pin to Pinata: {response.text}")
+                
+            return response.json()['IpfsHash']
             
         except Exception as e:
-            last_error = e
-            if attempt < retries - 1:
-                time.sleep(retry_delay)
-                continue
-            raise Exception(f"Failed to add content to IPFS after {retries} attempts: {str(last_error)}")
-
-def ipfs_cat(hash_value: str, retries: int = 3, retry_delay: float = 1.0) -> Optional[bytes]:
-    """
-    Retrieve content from IPFS with automatic re-pinning and retry logic.
+            raise Exception(f"Pinata pinning error: {str(e)}")
     
-    Args:
-        hash_value: The IPFS hash to retrieve
-        retries: Number of retry attempts
-        retry_delay: Delay between retries in seconds
-    
-    Returns:
-        bytes: The retrieved content
-    """
-    last_error = None
-    
-    for attempt in range(retries):
+    def unpin_from_ipfs(self, ipfs_hash: str) -> bool:
+        """
+        Unpin content from IPFS using Pinata.
+        Returns True if successful, False otherwise.
+        """
         try:
-            # Check if hash is in our pinning cache
-            if not pinning_cache.is_pinned(hash_value):
-                # Try to pin the hash
-                pin_response = requests.post(f'{IPFS_API_BASE_URL}/pin/add?arg={hash_value}')
-                if pin_response.status_code == 200:
-                    pinning_cache.add(hash_value)
+            url = f"{PINATA_BASE_URL}/pinning/unpin/{ipfs_hash}"
+            response = requests.delete(url, headers=self.headers)
             
-            # Get the file content
-            response = requests.post(f'{IPFS_API_BASE_URL}/cat?arg={hash_value}')
-            if response.status_code == 200:
-                return response.content
-            
-            # If we couldn't get the content, try to re-pin
-            pin_response = requests.post(f'{IPFS_API_BASE_URL}/pin/add?arg={hash_value}')
-            if pin_response.status_code != 200:
-                raise Exception(f"Failed to re-pin file: {pin_response.text}")
+            return response.status_code == 200
             
         except Exception as e:
-            last_error = e
-            if attempt < retries - 1:
-                time.sleep(retry_delay)
-                continue
-            raise Exception(f"Failed to retrieve content from IPFS after {retries} attempts: {str(last_error)}")
-
-def check_ipfs_node() -> bool:
-    """
-    Check if the IPFS node is running and accessible.
+            print(f"Pinata unpinning error: {str(e)}")
+            return False
     
-    Returns:
-        bool: True if the node is running and accessible, False otherwise
-    """
-    try:
-        response = requests.post(f'{IPFS_API_BASE_URL}/id')
-        return response.status_code == 200
-    except:
-        return False
+    def get_pin_list(self, filters: Optional[Dict] = None) -> List[Dict]:
+        """
+        Get list of pinned files from Pinata.
+        Optional filters can be provided to narrow down results.
+        """
+        try:
+            url = f"{PINATA_BASE_URL}/data/pinList"
+            if filters:
+                url += "?" + "&".join([f"{k}={v}" for k, v in filters.items()])
+                
+            response = requests.get(url, headers=self.headers)
+            
+            if response.status_code != 200:
+                raise Exception(f"Failed to get pin list: {response.text}")
+                
+            return response.json()['rows']
+            
+        except Exception as e:
+            print(f"Error getting pin list: {str(e)}")
+            return []
 
-def get_pinned_hashes() -> Set[str]:
-    """
-    Get the set of currently pinned hashes.
+# Initialize Pinata manager
+pinata_manager = PinataIPFSManager()
+
+# Update the RecordManager class to improve record processing
+class RecordManager:
+    def __init__(self, doctor_contract, fernet):
+        self.doctor_contract = doctor_contract
+        self.fernet = fernet
+        self._cache = {}  # Add a cache to store processed records
+        self._cache_lock = Lock()  # Add thread safety for cache operations
+        
+    def clear_cache(self):
+        """Clear the cache of processed records"""
+        with self._cache_lock:
+            self._cache.clear()
+            
+    def process_record(self, record, include_patient=False):
+        """Process a single record and decrypt its metadata"""
+        try:
+            # Check cache first
+            record_hash = record[2]  # recordHash
+            with self._cache_lock:
+                if record_hash in self._cache:
+                    return self._cache[record_hash]
+            
+            encrypted_metadata = base64.b64decode(record[4])  # record[4] is encryptedData
+            decrypted_metadata = self.fernet.decrypt(encrypted_metadata)
+            metadata = json.loads(decrypted_metadata.decode())
+            
+            processed_record = {
+                "record_hash": record_hash,
+                "notes": record[3],        # notes
+                "timestamp": record[5],    # timestamp
+                "filename": metadata.get("filename"),
+                "content_type": metadata.get("content_type"),
+                "ipfs_hash": metadata.get("ipfs_hash"),
+                "version_history": metadata.get("version_history", [])
+            }
+            
+            if include_patient:
+                processed_record["patient_hh_number"] = record[0]
+            
+            # Cache the processed record
+            with self._cache_lock:
+                self._cache[record_hash] = processed_record
+                
+            return processed_record
+        except Exception as e:
+            print(f"Error processing record: {e}")
+            return None
+            
+    def get_version_history(self, records, record_hash):
+        """Get the complete version history of a record"""
+        history = []
+        current_hash = record_hash
+        
+        while current_hash:
+            found = False
+            for record in records:
+                if record[2] == current_hash:  # record[2] is recordHash
+                    try:
+                        metadata = json.loads(self.fernet.decrypt(base64.b64decode(record[4])).decode())
+                        history.append({
+                            "file_hash": current_hash,
+                            "ipfs_hash": metadata.get("ipfs_hash"),
+                            "timestamp": record[5]
+                        })
+                        current_hash = metadata.get("previous_version")
+                        found = True
+                        break
+                    except Exception as e:
+                        print(f"Error processing version history: {e}")
+                        current_hash = None
+            if not found:
+                break
+                
+        return history
+
+    def get_latest_records(self, records):
+        """Get only the latest version of each record with improved error handling"""
+        processed_records = {}
+        
+        try:
+            # Sort records by timestamp (newest first)
+            sorted_records = sorted(records, key=lambda x: x[5], reverse=True)
+            
+            # Track processed file hashes to avoid duplicates
+            processed_hashes = set()
+            
+            for record in sorted_records:
+                try:
+                    if record[2] in processed_hashes:  # Skip if we've already processed this hash
+                        continue
+                        
+                    processed = self.process_record(record)
+                    if processed:
+                        metadata = json.loads(self.fernet.decrypt(base64.b64decode(record[4])).decode())
+                        previous_version = metadata.get("previous_version")
+                        
+                        # Add current hash to processed set
+                        processed_hashes.add(record[2])
+                        
+                        if previous_version:
+                            processed_hashes.add(previous_version)  # Also mark previous version as processed
+                            
+                        # Update or add the record
+                        processed_records[record[2]] = processed
+                        
+                        # Update version history
+                        processed_records[record[2]]["version_history"] = self.get_version_history(records, record[2])
+                        
+                except Exception as e:
+                    print(f"Error processing individual record: {e}")
+                    continue
+                    
+            return list(processed_records.values())
+            
+        except Exception as e:
+            print(f"Error in get_latest_records: {e}")
+            return list(processed_records.values())  # Return what we have even if there was an error
     
-    Returns:
-        Set[str]: Set of pinned IPFS hashes
-    """
-    return set(pinning_cache.pinned_hashes)
-
-
 # Load environment variables from .env file
 load_dotenv()
 
@@ -783,11 +802,6 @@ def verify_medical_record_creation(doctor_contract, patient_hh_number, record_ha
 @app.route('/create_medical_record', methods=['POST'])
 def create_medical_record():
     try:
-        # Check if IPFS node is running
-        if not check_ipfs_node():
-            return jsonify({"error": "IPFS node is not running"}), 500
-
-        # Validate input
         if 'file' not in request.files or \
            not request.form.get('patient_hh_number') or \
            not request.form.get('doctor_hh_number'):
@@ -812,21 +826,8 @@ def create_medical_record():
         file_hash = hashlib.sha256(file_content).hexdigest()
         encrypted_content = fernet.encrypt(file_content)
         
-        # IPFS storage with verification
-        max_ipfs_retries = 3
-        ipfs_hash = None
-        
-        for attempt in range(max_ipfs_retries):
-            try:
-                ipfs_hash = ipfs_add_bytes(encrypted_content)
-                # Verify IPFS storage
-                stored_content = ipfs_cat(ipfs_hash)
-                if stored_content == encrypted_content:
-                    break
-            except Exception as e:
-                if attempt == max_ipfs_retries - 1:
-                    raise Exception(f"Failed to store file in IPFS after {max_ipfs_retries} attempts")
-                continue
+        # Pin to IPFS using Pinata
+        ipfs_hash = pinata_manager.pin_to_ipfs(encrypted_content)
 
         # Create metadata
         metadata = {
@@ -838,60 +839,37 @@ def create_medical_record():
         }
         encrypted_metadata = fernet.encrypt(json.dumps(metadata).encode())
 
-        # Blockchain transaction with retry mechanism
-        max_blockchain_retries = 3
-        tx_hash = None
-        tx_receipt = None
-        
+        # Blockchain transaction
         account = w3.eth.account.from_key(private_key)
         account_address = account.address
+        nonce = w3.eth.get_transaction_count(account_address)
 
-        for attempt in range(max_blockchain_retries):
-            try:
-                nonce = w3.eth.get_transaction_count(account_address)
-                
-                transaction = doctor_contract.functions.createMedicalRecord(
-                    patient_hh_number,
-                    doctor_hh_number,
-                    file_hash,
-                    notes,
-                    base64.b64encode(encrypted_metadata).decode()
-                ).build_transaction({
-                    'from': account_address,
-                    'gas': 2000000,
-                    'gasPrice': w3.to_wei('20', 'gwei'),
-                    'nonce': nonce + attempt,
-                })
+        transaction = doctor_contract.functions.createMedicalRecord(
+            patient_hh_number,
+            doctor_hh_number,
+            file_hash,
+            notes,
+            base64.b64encode(encrypted_metadata).decode()
+        ).build_transaction({
+            'from': account_address,
+            'gas': 2000000,
+            'gasPrice': w3.to_wei('20', 'gwei'),
+            'nonce': nonce,
+        })
 
-                signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
-                tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
-                tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-
-                # Verify record creation
-                if verify_medical_record_creation(doctor_contract, patient_hh_number, file_hash):
-                    break
-                else:
-                    raise Exception("Record creation verification failed")
-                    
-            except Exception as e:
-                if attempt == max_blockchain_retries - 1:
-                    # If IPFS upload succeeded but blockchain failed, try to unpin the file
-                    if ipfs_hash:
-                        try:
-                            requests.post(f'{IPFS_API_BASE_URL}/pin/rm?arg={ipfs_hash}')
-                        except:
-                            pass
-                    raise Exception(f"Failed to create medical record after {max_blockchain_retries} attempts: {str(e)}")
-                continue
+        signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
         if tx_receipt.status == 1:
-            # Create audit log for record creation
+            # Create audit log
             audit_details = json.dumps({
                 "action": "Created medical record",
                 "patient": patient_hh_number,
-                "file_hash": file_hash
+                "file_hash": file_hash,
+                "ipfs_hash": ipfs_hash
             })
-            create_audit_log(doctor_hh_number, 0, audit_details)  # 0 for CREATE action
+            create_audit_log(doctor_hh_number, 0, audit_details)
 
         return jsonify({
             "status": "success",
@@ -983,30 +961,42 @@ def get_medical_record_file():
             if not has_access:
                 return jsonify({"error": "Doctor does not have access to this patient's records"}), 403
 
-        # Get encrypted content from IPFS
-        encrypted_content = ipfs_cat(ipfs_hash)
-        
-        # Decrypt the content
-        decrypted_content = fernet.decrypt(encrypted_content)
+        # Get file content from Pinata/IPFS
+        try:
+            # Construct the IPFS gateway URL (using Pinata's gateway)
+            ipfs_url = f"https://gateway.pinata.cloud/ipfs/{ipfs_hash}"
+            
+            # Fetch the encrypted content
+            response = requests.get(ipfs_url)
+            if response.status_code != 200:
+                return jsonify({"error": "Failed to fetch file from IPFS"}), 500
+                
+            encrypted_content = response.content
+            
+            # Decrypt the content
+            decrypted_content = fernet.decrypt(encrypted_content)
 
-        # If doctor is accessing the record, create audit log
-        if doctor_hh_number:
-            audit_details = json.dumps({
-                "action": "Viewed medical record",
-                "patient": patient_hh_number,
-                "ipfs_hash": ipfs_hash
-            })
-            create_audit_log(doctor_hh_number, 2, audit_details)  # 2 for VIEW action
+            # If doctor is accessing the record, create audit log
+            if doctor_hh_number:
+                audit_details = json.dumps({
+                    "action": "Viewed medical record",
+                    "patient": patient_hh_number,
+                    "ipfs_hash": ipfs_hash
+                })
+                create_audit_log(doctor_hh_number, 2, audit_details)  # 2 for VIEW action
 
-        return decrypted_content, 200, {
-            'Content-Type': content_type,  # Use the original content type
-            'Content-Disposition': f'attachment; filename=medical_record_{ipfs_hash}'
-        }
+            return decrypted_content, 200, {
+                'Content-Type': content_type,
+                'Content-Disposition': f'attachment; filename=medical_record_{ipfs_hash}'
+            }
+
+        except Exception as e:
+            return jsonify({"error": f"Failed to retrieve or decrypt file: {str(e)}"}), 500
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# Add this new route to your Flask backend (paste.txt)
+# Update the get_patient_own_records endpoint for better error handling and persistence
 @app.route('/get_patient_own_records', methods=['GET'])
 def get_patient_own_records():
     try:
@@ -1015,32 +1005,42 @@ def get_patient_own_records():
         if not patient_hh_number:
             return jsonify({"error": "Missing patient_hh_number parameter"}), 400
 
-        # Get medical records directly without doctor authentication
-        records = doctor_contract.functions.getPatientAllMedicalRecords(
-            patient_hh_number
-        ).call()
-
-        # Process and decrypt records
-        processed_records = []
-        for record in records:
+        # Get all medical records with retry logic
+        max_retries = 3
+        retry_delay = 1  # seconds
+        
+        for attempt in range(max_retries):
             try:
-                # Decrypt the metadata
-                encrypted_metadata = base64.b64decode(record[4])  # record[4] is encryptedData
-                decrypted_metadata = fernet.decrypt(encrypted_metadata)
-                metadata = json.loads(decrypted_metadata.decode())
-
-                processed_record = {
-                    "record_hash": record[2],  # recordHash
-                    "notes": record[3],        # notes
-                    "timestamp": record[5],     # timestamp
-                    "filename": metadata.get("filename"),
-                    "content_type": metadata.get("content_type"),
-                    "ipfs_hash": metadata.get("ipfs_hash")
-                }
-                processed_records.append(processed_record)
+                records = doctor_contract.functions.getPatientAllMedicalRecords(
+                    patient_hh_number
+                ).call()
+                break
             except Exception as e:
-                print(f"Error processing record: {e}")
+                if attempt == max_retries - 1:
+                    raise e
+                time.sleep(retry_delay)
                 continue
+
+        # Use RecordManager to process records
+        record_manager = RecordManager(doctor_contract, fernet)
+        processed_records = record_manager.get_latest_records(records)
+
+        # Verify IPFS availability for each record
+        for record in processed_records:
+            try:
+                ipfs_hash = record.get('ipfs_hash')
+                if ipfs_hash:
+                    # Check if the file is still pinned in Pinata
+                    pin_list = pinata_manager.get_pin_list({'ipfs_pin_hash': ipfs_hash})
+                    if not pin_list:
+                        # If not found in Pinata, try to re-pin it
+                        print(f"Re-pinning file with hash: {ipfs_hash}")
+                        # Add re-pinning logic here if needed
+            except Exception as e:
+                print(f"Error verifying IPFS record {ipfs_hash}: {e}")
+
+        # Sort records by timestamp (newest first)
+        processed_records.sort(key=lambda x: x['timestamp'], reverse=True)
 
         return jsonify({
             "status": "success",
@@ -1048,8 +1048,10 @@ def get_patient_own_records():
         })
 
     except Exception as e:
+        print(f"Error in get_patient_own_records: {e}")
         return jsonify({"error": str(e)}), 500
 
+# Update the get_doctor_patient_records endpoint for better persistence
 @app.route('/get_doctor_patient_records', methods=['GET'])
 def get_doctor_patient_records():
     try:
@@ -1058,47 +1060,73 @@ def get_doctor_patient_records():
         if not doctor_hh_number:
             return jsonify({"error": "Missing doctor_hh_number parameter"}), 400
 
-        # Get all patients that granted access to the doctor
-        patients = doctor_contract.functions.getDoctorPatients(doctor_hh_number).call()
+        # Get all patients with retry logic
+        max_retries = 3
+        retry_delay = 1  # seconds
         
+        for attempt in range(max_retries):
+            try:
+                patients = doctor_contract.functions.getDoctorPatients(doctor_hh_number).call()
+                break
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise e
+                time.sleep(retry_delay)
+                continue
+
+        record_manager = RecordManager(doctor_contract, fernet)
         all_records = []
-        
-        # Get records for each patient
+
         for patient_hh_number in patients:
-            # Check if doctor still has access
-            has_access = doctor_contract.functions.checkPatientAccess(
-                patient_hh_number,
-                doctor_hh_number
-            ).call()
-            
-            if has_access:
-                # Get patient records
-                records = doctor_contract.functions.getPatientMedicalRecords(
+            try:
+                has_access = doctor_contract.functions.checkPatientAccess(
                     patient_hh_number,
                     doctor_hh_number
                 ).call()
                 
-                # Process and decrypt records
-                for record in records:
-                    try:
-                        # Decrypt the metadata
-                        encrypted_metadata = base64.b64decode(record[4])  # record[4] is encryptedData
-                        decrypted_metadata = fernet.decrypt(encrypted_metadata)
-                        metadata = json.loads(decrypted_metadata.decode())
+                if has_access:
+                    # Get records with retry logic
+                    for attempt in range(max_retries):
+                        try:
+                            records = doctor_contract.functions.getPatientMedicalRecords(
+                                patient_hh_number,
+                                doctor_hh_number
+                            ).call()
+                            break
+                        except Exception as e:
+                            if attempt == max_retries - 1:
+                                raise e
+                            time.sleep(retry_delay)
+                            continue
+                    
+                    # Process records for this patient
+                    patient_records = record_manager.get_latest_records(records)
+                    
+                    # Verify IPFS availability for each record
+                    for record in patient_records:
+                        try:
+                            ipfs_hash = record.get('ipfs_hash')
+                            if ipfs_hash:
+                                # Check if the file is still pinned in Pinata
+                                pin_list = pinata_manager.get_pin_list({'ipfs_pin_hash': ipfs_hash})
+                                if not pin_list:
+                                    # If not found in Pinata, try to re-pin it
+                                    print(f"Re-pinning file with hash: {ipfs_hash}")
+                                    # Add re-pinning logic here if needed
+                        except Exception as e:
+                            print(f"Error verifying IPFS record {ipfs_hash}: {e}")
+                    
+                    # Add patient_hh_number to each record
+                    for record in patient_records:
+                        record["patient_hh_number"] = patient_hh_number
+                        all_records.extend([record])
 
-                        processed_record = {
-                            "patient_hh_number": patient_hh_number,
-                            "record_hash": record[2],  # recordHash
-                            "notes": record[3],        # notes
-                            "timestamp": record[5],     # timestamp
-                            "filename": metadata.get("filename"),
-                            "content_type": metadata.get("content_type"),
-                            "ipfs_hash": metadata.get("ipfs_hash")
-                        }
-                        all_records.append(processed_record)
-                    except Exception as e:
-                        print(f"Error processing record: {e}")
-                        continue
+            except Exception as e:
+                print(f"Error processing patient {patient_hh_number}: {e}")
+                continue
+
+        # Sort all records by timestamp (newest first)
+        all_records.sort(key=lambda x: x['timestamp'], reverse=True)
 
         return jsonify({
             "status": "success",
@@ -1106,21 +1134,19 @@ def get_doctor_patient_records():
         })
 
     except Exception as e:
+        print(f"Error in get_doctor_patient_records: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/update_medical_record', methods=['PUT'])
 def update_medical_record():
     try:
-        # Check if IPFS node is running
-        if not check_ipfs_node():
-            return jsonify({"error": "IPFS node is not running. Please start your IPFS daemon."}), 500
-
-        # Check if required fields are present
-        if 'file' not in request.files or \
-           not request.form.get('patient_hh_number') or \
-           not request.form.get('doctor_hh_number') or \
-           not request.form.get('old_file_hash'):
-            return jsonify({"error": "Missing required fields"}), 400
+        if 'file' not in request.files:
+            return jsonify({"status": "error", "message": "No file provided"}), 400
+            
+        required_fields = ['patient_hh_number', 'doctor_hh_number', 'old_file_hash']
+        for field in required_fields:
+            if not request.form.get(field):
+                return jsonify({"status": "error", "message": f"Missing required field: {field}"}), 400
 
         patient_hh_number = request.form.get('patient_hh_number')
         doctor_hh_number = request.form.get('doctor_hh_number')
@@ -1128,97 +1154,123 @@ def update_medical_record():
         notes = request.form.get('notes', '')
         file = request.files['file']
 
-        # Check if doctor has access
+        # Verify doctor access
         has_access = doctor_contract.functions.checkPatientAccess(
             patient_hh_number,
             doctor_hh_number
         ).call()
 
         if not has_access:
-            return jsonify({"error": "Doctor does not have access to this patient's records"}), 403
+            return jsonify({
+                "status": "error", 
+                "message": "Doctor does not have access to update this record"
+            }), 403
 
-        # Read and encrypt the new file
+        # Get the old record's metadata
+        records = doctor_contract.functions.getPatientAllMedicalRecords(patient_hh_number).call()
+        old_ipfs_hash = None
+        version_history = []
+        
+        for record in records:
+            if record[2] == old_file_hash:  # record[2] is recordHash
+                try:
+                    encrypted_metadata = base64.b64decode(record[4])
+                    decrypted_metadata = fernet.decrypt(encrypted_metadata)
+                    old_metadata = json.loads(decrypted_metadata.decode())
+                    old_ipfs_hash = old_metadata.get('ipfs_hash')
+                    version_history = old_metadata.get('version_history', [])
+                    break
+                except Exception as e:
+                    print(f"Error decoding old metadata: {str(e)}")
+
+        # Add the current version to history before creating new version
+        if old_ipfs_hash:
+            version_history.append({
+                "file_hash": old_file_hash,
+                "ipfs_hash": old_ipfs_hash,
+                "timestamp": datetime.now().isoformat()
+            })
+
+        # Process new file
         file_content = file.read()
-        
-        # Generate a new file hash
         new_file_hash = hashlib.sha256(file_content).hexdigest()
-        
-        # Encrypt the file content
         encrypted_content = fernet.encrypt(file_content)
-        
-        # Save encrypted file to IPFS
-        new_ipfs_hash = ipfs_add_bytes(encrypted_content)
+        new_ipfs_hash = pinata_manager.pin_to_ipfs(encrypted_content)
 
-        # Create encrypted metadata
+        # Create metadata for new version
         metadata = {
             "filename": file.filename,
             "content_type": file.content_type,
             "timestamp": datetime.now().isoformat(),
             "ipfs_hash": new_ipfs_hash,
-            "file_hash": new_file_hash
+            "file_hash": new_file_hash,
+            "previous_version": old_file_hash,
+            "version_history": version_history
         }
         encrypted_metadata = fernet.encrypt(json.dumps(metadata).encode())
 
-        # Get the account from the private key
+        # Update blockchain record
         account = w3.eth.account.from_key(private_key)
         account_address = account.address
-
-        # Get the current nonce
         nonce = w3.eth.get_transaction_count(account_address)
 
-        # Update medical record on blockchain with retry mechanism
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                transaction = doctor_contract.functions.updateMedicalRecord(
-                    patient_hh_number,
-                    doctor_hh_number,
-                    old_file_hash,
-                    new_file_hash,
-                    notes,
-                    base64.b64encode(encrypted_metadata).decode()
-                ).build_transaction({
-                    'from': account_address,
-                    'gas': 2000000,
-                    'gasPrice': w3.to_wei('20', 'gwei'),
-                    'nonce': nonce + attempt,
-                })
+        transaction = doctor_contract.functions.updateMedicalRecord(
+            patient_hh_number,
+            doctor_hh_number,
+            old_file_hash,
+            new_file_hash,
+            notes,
+            base64.b64encode(encrypted_metadata).decode()
+        ).build_transaction({
+            'from': account_address,
+            'gas': 2000000,
+            'gasPrice': w3.to_wei('20', 'gwei'),
+            'nonce': nonce,
+        })
 
-                signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
-                tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
-                tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-                
-                if tx_receipt.status == 1:  # Transaction successful
-                    break
-            except Exception as e:
-                if attempt == max_retries - 1:  # Last attempt
-                    raise e
-                continue
+        signed_txn = w3.eth.account.sign_transaction(transaction, private_key)
+        tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
 
         if tx_receipt.status == 1:
-            # Create audit log for record update
+            # Unpin the old version after successful update
+            if old_ipfs_hash:
+                try:
+                    pinata_manager.unpin_from_ipfs(old_ipfs_hash)
+                except Exception as e:
+                    print(f"Warning: Failed to unpin old file: {str(e)}")
+
+            # Create audit log
             audit_details = json.dumps({
                 "action": "Updated medical record",
                 "patient": patient_hh_number,
                 "old_file_hash": old_file_hash,
-                "new_file_hash": new_file_hash
-            })
-            create_audit_log(doctor_hh_number, 1, audit_details)  # 1 for UPDATE action
-
-        return jsonify({
-            "status": "success",
-            "message": "Medical record updated successfully",
-            "data": {
-                "old_file_hash": old_file_hash,
                 "new_file_hash": new_file_hash,
-                "new_ipfs_hash": new_ipfs_hash,
-                "transaction_hash": tx_hash.hex(),
-                "block_number": tx_receipt.blockNumber
-            }
-        })
+                "new_ipfs_hash": new_ipfs_hash
+            })
+            create_audit_log(doctor_hh_number, 1, audit_details)
+
+            return jsonify({
+                "status": "success",
+                "message": "Medical record updated successfully",
+                "data": {
+                    "old_file_hash": old_file_hash,
+                    "new_file_hash": new_file_hash,
+                    "new_ipfs_hash": new_ipfs_hash,
+                    "transaction_hash": tx_hash.hex(),
+                    "block_number": tx_receipt.blockNumber
+                }
+            })
+        else:
+            # If transaction failed, unpin the new file
+            pinata_manager.unpin_from_ipfs(new_ipfs_hash)
+            raise Exception("Transaction failed")
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": f"Unexpected error: {str(e)}"
+        }), 500
     
 # Helper function to create audit logs
 def create_audit_log(entity_id, action_type, details):

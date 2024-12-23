@@ -14,24 +14,37 @@ import mimetypes
 import logging
 
 def add_medical_records_section(parent, doctor_info):
-    records_frame = ctk.CTkFrame(parent)
+    records_frame = ctk.CTkFrame(parent, fg_color="white")  # Changed to match patient frame color
     records_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-    # Patient HH Number Entry
-    patient_hh_frame = ctk.CTkFrame(records_frame)
-    patient_hh_frame.pack(fill="x", pady=10)
+    # Input section with modern styling
+    input_frame = ctk.CTkFrame(records_frame, fg_color="#f8fafc", corner_radius=10)  # Matching input frame color
+    input_frame.pack(fill="x", padx=20, pady=(0, 20))
+
+    # Patient HH Number Input
+    input_container = ctk.CTkFrame(input_frame, fg_color="transparent")
+    input_container.pack(fill="x", pady=15, padx=15)
+
+    ctk.CTkLabel(
+        input_container,
+        text="Patient HH Number:",
+        font=("Arial", 14),
+        text_color="#64748b"
+    ).pack(side="left", padx=5)
 
     patient_hh_entry = ctk.CTkEntry(
-        patient_hh_frame,
-        placeholder_text="Patient HH Number",
-        width=300
+        input_container,
+        width=250,
+        height=35,
+        corner_radius=8,
+        border_color="#e2e8f0"
     )
     patient_hh_entry.pack(side="left", padx=10)
 
-    # Notes Entry
-    notes_frame = ctk.CTkFrame(records_frame)
+    # Notes Entry (same as before)
+    notes_frame = ctk.CTkFrame(records_frame, fg_color="transparent")
     notes_frame.pack(fill="x", pady=10)
-    
+
     notes_entry = ctk.CTkTextbox(
         notes_frame,
         height=100,
@@ -40,8 +53,8 @@ def add_medical_records_section(parent, doctor_info):
     notes_entry.pack(side="left", padx=10)
     notes_entry.insert("1.0", "Enter notes here...")
 
-    # File Selection
-    file_frame = ctk.CTkFrame(records_frame)
+    # File Selection (same as before)
+    file_frame = ctk.CTkFrame(records_frame, fg_color="transparent")
     file_frame.pack(fill="x", pady=10)
 
     selected_file_label = ctk.CTkLabel(
@@ -75,7 +88,9 @@ def add_medical_records_section(parent, doctor_info):
     select_file_btn = ctk.CTkButton(
         file_frame,
         text="Select Medical Record File",
-        command=select_medical_record_file
+        command=select_medical_record_file,
+        fg_color="#22c55e",  # Matching button color with patient button
+        hover_color="#16a34a"  # Matching hover color with patient button
     )
     select_file_btn.pack(side="left", padx=10)
 
@@ -162,14 +177,21 @@ def add_medical_records_section(parent, doctor_info):
             if 'path' in selected_file and 'file' in files:
                 files['file'][1].close()
 
+    # Create Medical Record Button (matching style)
     create_record_btn = ctk.CTkButton(
         records_frame,
         text="Create Medical Record",
-        command=create_medical_record
+        command=create_medical_record,
+        fg_color="#22c55e",  # Matching button color
+        hover_color="#16a34a",  # Matching hover color
+        width=250,
+        height=40,
+        corner_radius=8
     )
     create_record_btn.pack(pady=10)
 
     return records_frame
+
 
 
 def show_doctor_dashboard(app, doctor_info):
@@ -177,15 +199,60 @@ def show_doctor_dashboard(app, doctor_info):
     for widget in app.winfo_children():
         widget.destroy()
 
-    # Dashboard Header
-    header_frame = ctk.CTkFrame(app, height=80, fg_color="#EAF6F6")
-    header_frame.pack(fill="x", pady=10)
-    welcome_label = ctk.CTkLabel(
-        header_frame, 
-        text=f"Welcome, Dr. {doctor_info.get('name', 'Doctor')}", 
-        font=("Arial", 24)
+    # Set color scheme
+    COLORS = {
+        'primary': "#2563eb",      # Blue
+        'secondary': "#f8fafc",    # Light gray
+        'accent': "#3b82f6",       # Lighter blue
+        'text': "#1e293b",         # Dark gray
+        'success': "#22c55e",      # Green
+        'warning': "#f59e0b"       # Orange
+    }
+
+    # Configure app background
+    app.configure(fg_color=COLORS['secondary'])
+
+    # Dashboard Header with modern styling
+    header_frame = customtkinter.CTkFrame(
+        app, 
+        height=100,
+        fg_color="white",
+        corner_radius=0
     )
-    welcome_label.pack(side="left", padx=20)
+    header_frame.pack(fill="x", pady=(0, 20))
+
+    # Profile section in header
+    profile_frame = customtkinter.CTkFrame(header_frame, fg_color="transparent")
+    profile_frame.pack(side="left", padx=30, pady=10)
+
+    # Profile icon
+    profile_label = customtkinter.CTkLabel(
+        profile_frame,
+        text="🩺",
+        font=("Arial", 32)
+    )
+    profile_label.pack(side="left", padx=(0, 15))
+
+    # Welcome text with name
+    welcome_frame = customtkinter.CTkFrame(profile_frame, fg_color="transparent")
+    welcome_frame.pack(side="left")
+    
+    welcome_text = customtkinter.CTkLabel(
+        welcome_frame,
+        text="Welcome back,",
+        font=("Arial", 14),
+        text_color=COLORS['text']
+    )
+    welcome_text.pack(anchor="w")
+    
+    name_label = customtkinter.CTkLabel(
+        welcome_frame,
+        text=f"{doctor_info.get('name', 'Doctor')}",
+        font=("Arial", 24, "bold"),
+        text_color=COLORS['primary']
+    )
+    name_label.pack(anchor="w")
+
     def handle_logout():
         # Show confirmation dialog
         confirm = messagebox.askyesno(
@@ -194,7 +261,7 @@ def show_doctor_dashboard(app, doctor_info):
         )
         if confirm:
             # Clear any session data or cookies if needed
-            # patient_info.clear()  # Clear patient info if needed
+            # doctor_info.clear()  # Clear doctor info if needed
             
             # Import the show_auth_page function at the top of your file
             from auth import show_auth_page  # Assuming auth_page.py contains show_auth_page
@@ -202,70 +269,120 @@ def show_doctor_dashboard(app, doctor_info):
             # Return to auth page
             show_auth_page(app)
 
+    # Logout button with modern styling
     logout_button = customtkinter.CTkButton(
-        header_frame, 
-        text="Logout", 
+        header_frame,
+        text="Logout",
+        font=("Arial", 14),
+        fg_color=COLORS['warning'],
+        hover_color="#ea580c",
+        width=120,
+        height=40,
         command=handle_logout
     )
-    logout_button.pack(side="right", padx=20)
+    logout_button.pack(side="right", padx=30, pady=10)
 
     # Main Content Area
-    content_frame = ctk.CTkFrame(app, fg_color="#EAF6F6")
-    content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    content_frame = customtkinter.CTkFrame(
+        app,
+        fg_color="transparent"
+    )
+    content_frame.pack(fill="both", expand=True, padx=30, pady=(0, 30))
 
-    # Tabs for different sections
-    tab_view = ctk.CTkTabview(content_frame, width=700)
+    # Modern tab view
+    tab_view = customtkinter.CTkTabview(
+        content_frame,
+        fg_color="transparent",
+        segmented_button_fg_color=COLORS['primary'],
+        segmented_button_selected_color=COLORS['accent'],
+        segmented_button_selected_hover_color=COLORS['accent'],
+        text_color="white",
+        corner_radius=15
+    )
     tab_view.pack(fill="both", expand=True)
 
-    # Personal Info Tab
-    personal_info_tab = tab_view.add("Personal Info")
+    # Add tabs with icons
+    personal_info_tab = tab_view.add("👤 Personal Info")
+    patient_records_tab = tab_view.add("📂 Patient Records")
+    medical_records_tab = tab_view.add("📋 Medical Records")
+    audit_logs_tab = tab_view.add("📊 Audit Logs")
+
+    # Create sections with modern styling
     create_doctor_info_section(personal_info_tab, doctor_info)
-
-    # Patient Records Tab
-    patient_records_tab = tab_view.add("Patient Records")
-    create_patient_records_section(patient_records_tab, doctor_info)  # Pass doctor_info
-
-    # Medical Records Tab
-    medical_records_tab = tab_view.add("Medical Records")
+    create_patient_records_section(patient_records_tab, doctor_info)
     add_medical_records_section(medical_records_tab, doctor_info)
-
-    # Access Management Tab
-    audit_logs_tab = tab_view.add("Audit Logs")
     audit_logs_section(audit_logs_tab, doctor_info)
 
-def create_doctor_info_section(parent, doctor_info):
-    info_frame = ctk.CTkFrame(parent)
-    info_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-    # Display doctor info and allow editing
+def create_doctor_info_section(parent, doctor_info):
+    info_frame = customtkinter.CTkFrame(parent, fg_color="white")
+    info_frame.pack(fill="both", expand=True, padx=20, pady=5)
+
+    # Display doctor info
     info_labels = [
-        ("Wallet Address", doctor_info.get("walletAddress", "N/A")),
         ("Name", doctor_info.get("name", "N/A")),
         ("Specialization", doctor_info.get("specialization", "N/A")),
         ("Hospital", doctor_info.get("hospitalName", "N/A")),
         ("Health Number", doctor_info.get("hhNumber", "N/A"))
     ]
 
-    # Create labels for static info (don't show wallet address)
     for label, value in info_labels:
-        if label != "Wallet Address":  # Hide wallet address
-            row = ctk.CTkFrame(info_frame)
-            row.pack(fill="x", pady=5)
-            ctk.CTkLabel(row, text=f"{label}:", anchor="w").pack(side="left", padx=5)
-            ctk.CTkLabel(row, text=value, anchor="w").pack(side="left", padx=5)
+        row = customtkinter.CTkFrame(info_frame, fg_color="transparent")
+        row.pack(fill="x", pady=5, padx=20)
+        customtkinter.CTkLabel(
+            row,
+            text=f"{label}:",
+            font=("Arial", 14),
+            text_color="#64748b",
+            anchor="w"
+        ).pack(side="left", padx=5)
+        customtkinter.CTkLabel(
+            row,
+            text=value,
+            font=("Arial", 14, "bold"),
+            text_color="#1e293b",
+            anchor="w"
+        ).pack(side="left", padx=5)
 
-    # Fields for editable information (specialization and hospital)
-    row_specialization = ctk.CTkFrame(info_frame)
-    row_specialization.pack(fill="x", pady=5)
-    ctk.CTkLabel(row_specialization, text="Specialization:", anchor="w").pack(side="left", padx=5)
-    specialization_entry = ctk.CTkEntry(row_specialization)
+    # Editable fields with modern styling
+    edit_frame = customtkinter.CTkFrame(info_frame, fg_color="#f8fafc", corner_radius=10)
+    edit_frame.pack(fill="x", pady=5, padx=20)
+
+    # Specialization input
+    specialization_frame = customtkinter.CTkFrame(edit_frame, fg_color="transparent")
+    specialization_frame.pack(fill="x", pady=5, padx=15)
+    customtkinter.CTkLabel(
+        specialization_frame,
+        text="Specialization:",
+        font=("Arial", 14),
+        text_color="#64748b"
+    ).pack(side="left", padx=5)
+    specialization_entry = customtkinter.CTkEntry(
+        specialization_frame,
+        width=300,
+        height=35,
+        corner_radius=8,
+        border_color="#e2e8f0"
+    )
     specialization_entry.insert(0, doctor_info.get("specialization", ""))
     specialization_entry.pack(side="left", padx=5)
 
-    row_hospital = ctk.CTkFrame(info_frame)
-    row_hospital.pack(fill="x", pady=5)
-    ctk.CTkLabel(row_hospital, text="Hospital:", anchor="w").pack(side="left", padx=5)
-    hospital_entry = ctk.CTkEntry(row_hospital)
+    # Hospital input
+    hospital_frame = customtkinter.CTkFrame(edit_frame, fg_color="transparent")
+    hospital_frame.pack(fill="x", pady=5, padx=15)
+    customtkinter.CTkLabel(
+        hospital_frame,
+        text="Hospital:",
+        font=("Arial", 14),
+        text_color="#64748b"
+    ).pack(side="left", padx=5)
+    hospital_entry = customtkinter.CTkEntry(
+        hospital_frame,
+        width=300,
+        height=35,
+        corner_radius=8,
+        border_color="#e2e8f0"
+    )
     hospital_entry.insert(0, doctor_info.get("hospitalName", ""))
     hospital_entry.pack(side="left", padx=5)
 
@@ -297,36 +414,49 @@ def create_doctor_info_section(parent, doctor_info):
                 # Update the displayed information with the new values
                 doctor_info["specialization"] = new_specialization
                 doctor_info["hospitalName"] = new_hospital
-                # Refresh the UI with the updated information
-                #create_doctor_info_section(parent, doctor_info)
             else:
                 messagebox.showerror("Error", data.get("message", "Failed to update information"))
         except Exception as e:
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
     # Button to trigger the update
-    update_button = ctk.CTkButton(info_frame, text="Update Info", command=update_doctor_info)
-    update_button.pack(pady=20)
+    update_button = customtkinter.CTkButton(info_frame, text="Update Info", command=update_doctor_info)
+    update_button.pack(pady=10)
+
 
 
 def create_patient_records_section(parent, doctor_info):
-    records_frame = ctk.CTkFrame(parent)
+    records_frame = customtkinter.CTkFrame(parent, fg_color="white", corner_radius=15)
     records_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-    # Table frame for displaying medical records
-    table_frame = ctk.CTkFrame(records_frame)
-    table_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    # Header with actions
+    header_frame = customtkinter.CTkFrame(records_frame, fg_color="transparent")
+    header_frame.pack(fill="x", pady=(20, 15), padx=20)
 
-    # Refresh button
-    refresh_button = ctk.CTkButton(
-        records_frame,
-        text="Refresh Records",
+    refresh_button = customtkinter.CTkButton(
+        header_frame,
+        text="↻ Refresh Records",
+        font=("Arial", 14),
+        fg_color="#2563eb",
+        hover_color="#1d4ed8",
+        width=150,
+        height=35,
+        corner_radius=8,
         command=lambda: refresh_records_table(doctor_info, table_frame)
     )
-    refresh_button.pack(pady=(0, 10))
+    refresh_button.pack(side="right")
+
+    # Table frame with modern styling
+    table_frame = customtkinter.CTkFrame(
+        records_frame,
+        fg_color="#f8fafc",
+        corner_radius=10
+    )
+    table_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
     # Initial load of records
     refresh_records_table(doctor_info, table_frame)
+
 
 def refresh_records_table(doctor_info, table_frame):
     # Clear existing table rows
@@ -342,19 +472,19 @@ def refresh_records_table(doctor_info, table_frame):
         return
 
     # Table headers
-    header_row = ctk.CTkFrame(table_frame)
+    header_row = ctk.CTkFrame(table_frame, fg_color="#f1f5f9")
     header_row.pack(fill="x", pady=5)
     headers = ["Patient ID", "Filename", "Type", "Notes", "Date", "Actions"]
     for header in headers:
         ctk.CTkLabel(header_row, text=header, width=120, anchor="w", font=("Arial", 12, "bold")).pack(side="left", padx=5)
 
     # Create scrollable frame for records
-    scrollable_frame = ctk.CTkScrollableFrame(table_frame, height=400)
+    scrollable_frame = ctk.CTkScrollableFrame(table_frame, height=400, fg_color="transparent")
     scrollable_frame.pack(fill="both", expand=True, pady=5)
 
     # Table rows
     for record in records:
-        row_frame = ctk.CTkFrame(scrollable_frame)
+        row_frame = ctk.CTkFrame(scrollable_frame, fg_color="transparent")
         row_frame.pack(fill="x", pady=2)
 
         # Convert timestamp to readable date
@@ -822,65 +952,71 @@ def request_patient_access(patient_hh, doctor_hh):
 
 def audit_logs_section(parent, doctor_info):
     """Create the audit logs section in the doctor's dashboard."""
-    logs_frame = ctk.CTkFrame(parent)
+    logs_frame = customtkinter.CTkFrame(parent, fg_color="white", corner_radius=15)
     logs_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-    # Header
-    header_frame = ctk.CTkFrame(logs_frame)
-    header_frame.pack(fill="x", pady=(0, 10))
-    
-    ctk.CTkLabel(
-        header_frame,
-        text="Medical Records Audit Logs",
-        font=("Arial", 16, "bold")
-    ).pack(side="left", padx=10)
+    # Header with refresh button
+    header_frame = customtkinter.CTkFrame(logs_frame, fg_color="transparent")
+    header_frame.pack(fill="x", pady=(20, 15), padx=20)
 
-    refresh_button = ctk.CTkButton(
+    refresh_button = customtkinter.CTkButton(
         header_frame,
-        text="Refresh Logs",
-        width=100,
+        text="↻ Refresh Logs",
+        font=("Arial", 14),
+        fg_color="#2563eb",
+        hover_color="#1d4ed8",
+        width=150,
+        height=35,
+        corner_radius=8,
         command=lambda: refresh_audit_logs(doctor_info, table_frame)
     )
-    refresh_button.pack(side="right", padx=10)
+    refresh_button.pack(side="right")
 
-    # Filters frame
-    filters_frame = ctk.CTkFrame(logs_frame)
-    filters_frame.pack(fill="x", pady=(0, 10))
+    # Filters section
+    filters_frame = customtkinter.CTkFrame(logs_frame, fg_color="#f8fafc", corner_radius=10)
+    filters_frame.pack(fill="x", padx=20, pady=(0, 20))
 
     # Action type filter
+    filter_container = customtkinter.CTkFrame(filters_frame, fg_color="transparent")
+    filter_container.pack(fill="x", pady=15, padx=15)
+
     action_types = ["All Actions", "CREATE", "UPDATE", "VIEW", "GRANT_ACCESS", "REVOKE_ACCESS"]
     action_var = customtkinter.StringVar(value="All Actions")
-    
-    ctk.CTkLabel(
-        filters_frame,
-        text="Filter by Action:",
-        anchor="w"
-    ).pack(side="left", padx=(10, 5))
-    
-    action_dropdown = ctk.CTkOptionMenu(
-        filters_frame,
-        values=action_types,
-        variable=action_var,
-        command=lambda _: refresh_audit_logs(doctor_info, table_frame, action_filter=action_var.get())
-    )
-    action_dropdown.pack(side="left", padx=5)
 
-    # Date range filter
-    date_frame = ctk.CTkFrame(filters_frame)
-    date_frame.pack(side="right", padx=10)
-    
-    ctk.CTkLabel(
-        date_frame,
-        text="Date Range:",
-        anchor="w"
+    customtkinter.CTkLabel(
+        filter_container,
+        text="Filter by Action:",
+        font=("Arial", 14),
+        text_color="#64748b"
     ).pack(side="left", padx=5)
 
-    # Create table frame
-    table_frame = ctk.CTkScrollableFrame(logs_frame, height=400)
-    table_frame.pack(fill="both", expand=True, pady=5)
+    action_dropdown = customtkinter.CTkOptionMenu(
+        filter_container,
+        values=action_types,
+        variable=action_var,
+        width=200,
+        height=35,
+        corner_radius=8,
+        fg_color="#2563eb",
+        button_color="#1d4ed8",
+        button_hover_color="#1e40af",
+        dropdown_hover_color="#1e40af",
+        command=lambda _: refresh_audit_logs(doctor_info, table_frame, action_filter=action_var.get())
+    )
+    action_dropdown.pack(side="left", padx=10)
+
+    # Table frame with modern styling
+    table_frame = customtkinter.CTkScrollableFrame(
+        logs_frame,
+        fg_color="#f8fafc",
+        corner_radius=10,
+        height=400
+    )
+    table_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
 
     # Initial load of audit logs
     refresh_audit_logs(doctor_info, table_frame)
+
 
 def refresh_audit_logs(doctor_info, table_frame, action_filter="All Actions"):
     """Refresh the audit logs table with current data."""
@@ -912,7 +1048,7 @@ def refresh_audit_logs(doctor_info, table_frame, action_filter="All Actions"):
 
         # Create headers
         headers = ["Timestamp", "Action", "Details", "Performer"]
-        header_frame = ctk.CTkFrame(table_frame)
+        header_frame = ctk.CTkFrame(table_frame, fg_color="#f1f5f9")
         header_frame.pack(fill="x", pady=(0, 5))
 
         for header in headers:
@@ -926,7 +1062,7 @@ def refresh_audit_logs(doctor_info, table_frame, action_filter="All Actions"):
 
         # Add log entries
         for log in audit_logs:
-            row_frame = ctk.CTkFrame(table_frame)
+            row_frame = ctk.CTkFrame(table_frame, fg_color="transparent")
             row_frame.pack(fill="x", pady=2)
 
             # Timestamp
