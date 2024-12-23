@@ -27,10 +27,14 @@ IPFS_API_BASE_URL = 'http://127.0.0.1:5001/api/v0'
 encryption_key = Fernet.generate_key()
 fernet = Fernet(encryption_key)
 
-# Pinata configuration
-PINATA_API_KEY = "1d4e98ae316ec67e0147"  # Replace with your actual Pinata API key
-PINATA_SECRET_API_KEY = "eee12cb52ec621fd5ca6c4db72b297018aa448d26427d1b4b0d6c0e1b41ec1f9"  # Replace with your actual Pinata secret key
-PINATA_BASE_URL = "https://api.pinata.cloud"
+# Load environment variables
+load_dotenv()
+
+# Read configuration values from the environment
+IPFS_API_BASE_URL = os.getenv('IPFS_API_BASE_URL', 'http://127.0.0.1:5001/api/v0')
+PINATA_API_KEY = os.getenv('PINATA_API_KEY')
+PINATA_SECRET_API_KEY = os.getenv('PINATA_SECRET_API_KEY')
+PINATA_BASE_URL = os.getenv('PINATA_BASE_URL', 'https://api.pinata.cloud')
 
 class PinataIPFSManager:
     def __init__(self):
