@@ -951,8 +951,9 @@ def get_medical_record_file():
         if not ipfs_hash or not patient_hh_number:
             return jsonify({"error": "Missing required parameters"}), 400
 
-        # If doctor_hh_number is provided, check doctor's access
+        # If doctor_hh_number is provided, it's a doctor viewing the record
         if doctor_hh_number:
+            # Verify doctor's access
             has_access = doctor_contract.functions.checkPatientAccess(
                 patient_hh_number,
                 doctor_hh_number
@@ -963,7 +964,7 @@ def get_medical_record_file():
 
         # Get file content from Pinata/IPFS
         try:
-            # Construct the IPFS gateway URL (using Pinata's gateway)
+            # Construct the IPFS gateway URL
             ipfs_url = f"https://gateway.pinata.cloud/ipfs/{ipfs_hash}"
             
             # Fetch the encrypted content
@@ -976,14 +977,43 @@ def get_medical_record_file():
             # Decrypt the content
             decrypted_content = fernet.decrypt(encrypted_content)
 
-            # If doctor is accessing the record, create audit log
+            # Create appropriate audit logs based on who is viewing
             if doctor_hh_number:
-                audit_details = json.dumps({
+                # Doctor viewing - create logs for both doctor and patient audit trails
+                doctor_audit_details = json.dumps({
                     "action": "Viewed medical record",
                     "patient": patient_hh_number,
                     "ipfs_hash": ipfs_hash
                 })
-                create_audit_log(doctor_hh_number, 2, audit_details)  # 2 for VIEW action
+                create_audit_log(doctor_hh_number, 2, doctor_audit_details)  # 2 for VIEW action
+
+            else:
+                # Patient viewing - find all doctors who have access to this record
+                records = doctor_contract.functions.getPatientAllMedicalRecords(patient_hh_number).call()
+                record_doctors = set()
+                
+                # Find the doctor(s) associated with this record
+                for record in records:
+                    try:
+                        encrypted_metadata = base64.b64decode(record[4])
+                        decrypted_metadata = fernet.decrypt(encrypted_metadata)
+                        metadata = json.loads(decrypted_metadata.decode())
+                        
+                        if metadata.get('ipfs_hash') == ipfs_hash:
+                            record_doctor = record[1]  # doctor_hh_number from record
+                            record_doctors.add(record_doctor)
+                    except Exception as e:
+                        print(f"Error processing record metadata: {e}")
+                        continue
+
+                # Create audit logs for each associated doctor
+                for record_doctor in record_doctors:
+                    patient_audit_details = json.dumps({
+                        "action": "Patient viewed medical record",
+                        "patient": patient_hh_number,
+                        "ipfs_hash": ipfs_hash
+                    })
+                    create_audit_log(record_doctor, 2, patient_audit_details)  # 2 for VIEW action
 
             return decrypted_content, 200, {
                 'Content-Type': content_type,

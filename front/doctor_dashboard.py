@@ -150,11 +150,67 @@ def add_medical_records_section(parent, doctor_info):
             
             if response.status_code == 200:
                 response_data = response.json()
-                success_message = (
-                    f"Medical record created successfully\n"
-                    f"Transaction Hash: {response_data['data']['transaction_hash'][:10]}..."
+                
+                # Create success dialog
+                success_window = customtkinter.CTkToplevel()
+                success_window.title("Success")
+                success_window.geometry("400x300")
+                success_window.transient(records_frame.winfo_toplevel())  # Make it modal
+                
+                # Configure success window
+                success_window.grid_columnconfigure(0, weight=1)
+                
+                # Success icon (checkmark emoji)
+                icon_label = customtkinter.CTkLabel(
+                    success_window,
+                    text="✅",
+                    font=("Arial", 48)
                 )
-                update_status(success_message)
+                icon_label.grid(row=0, column=0, pady=(20, 10))
+                
+                # Success title
+                title_label = customtkinter.CTkLabel(
+                    success_window,
+                    text="Medical Record Created Successfully!",
+                    font=("Arial", 16, "bold"),
+                    text_color="#16a34a"  # Green color
+                )
+                title_label.grid(row=1, column=0, pady=(0, 20))
+                
+                # Transaction details frame
+                details_frame = customtkinter.CTkFrame(success_window, fg_color="#f0fdf4")  # Light green background
+                details_frame.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="ew")
+                
+                # Details content
+                transaction_hash = response_data['data']['transaction_hash']
+                details_text = customtkinter.CTkLabel(
+                    details_frame,
+                    text=f"Transaction Hash:\n{transaction_hash[:10]}...{transaction_hash[-10:]}",
+                    font=("Arial", 12),
+                    text_color="#166534"  # Darker green for text
+                )
+                details_text.pack(pady=15, padx=10)
+                
+                # OK button
+                ok_button = customtkinter.CTkButton(
+                    success_window,
+                    text="OK",
+                    command=success_window.destroy,
+                    fg_color="#16a34a",
+                    hover_color="#15803d",
+                    width=120,
+                    height=35,
+                    corner_radius=8
+                )
+                ok_button.grid(row=3, column=0, pady=(0, 20))
+                
+                # Center the window on the screen
+                success_window.update_idletasks()
+                width = success_window.winfo_width()
+                height = success_window.winfo_height()
+                x = (success_window.winfo_screenwidth() // 2) - (width // 2)
+                y = (success_window.winfo_screenheight() // 2) - (height // 2)
+                success_window.geometry(f'{width}x{height}+{x}+{y}')
                 
                 # Reset form
                 patient_hh_entry.delete(0, 'end')
@@ -163,7 +219,7 @@ def add_medical_records_section(parent, doctor_info):
                 selected_file_label.configure(text="No file selected")
                 if 'path' in selected_file:
                     del selected_file['path']
-            
+                
             elif response.status_code == 403:
                 update_status("Error: No access to this patient's records", True)
             else:
@@ -178,17 +234,21 @@ def add_medical_records_section(parent, doctor_info):
                 files['file'][1].close()
 
     # Create Medical Record Button (matching style)
+    # Update the create medical record button style
     create_record_btn = ctk.CTkButton(
         records_frame,
         text="Create Medical Record",
         command=create_medical_record,
-        fg_color="#22c55e",  # Matching button color
-        hover_color="#16a34a",  # Matching hover color
-        width=250,
-        height=40,
-        corner_radius=8
+        fg_color="#3b82f6",  # Blue color
+        hover_color="#2563eb",
+        width=200,
+        height=45,
+        corner_radius=10,
+        font=("Arial", 14, "bold"),
+        border_width=1,
+        border_color="#60a5fa"  # Light blue border
     )
-    create_record_btn.pack(pady=10)
+    create_record_btn.pack(pady=15)
 
     return records_frame
 
@@ -498,23 +558,32 @@ def refresh_records_table(doctor_info, table_frame):
         ctk.CTkLabel(row_frame, text=date_str, width=120, anchor="w").pack(side="left", padx=5)
 
         # Actions frame
-        actions_frame = ctk.CTkFrame(row_frame)
+        actions_frame = ctk.CTkFrame(row_frame, fg_color="transparent")
         actions_frame.pack(side="left", padx=5)
 
-        # View Button
+        # Update the view and update buttons style in the records table
         view_button = ctk.CTkButton(
             actions_frame,
             text="View",
-            width=60,
+            width=80,
+            height=32,
+            corner_radius=8,
+            fg_color="#3b82f6",  # Blue color
+            hover_color="#2563eb",
+            font=("Arial", 13),
             command=lambda r=record: view_record(r, doctor_info)
         )
         view_button.pack(side="left", padx=2)
 
-        # Update Button
         update_button = ctk.CTkButton(
             actions_frame,
             text="Update",
-            width=60,
+            width=80,
+            height=32,
+            corner_radius=8,
+            fg_color="#10b981",  # Green color
+            hover_color="#059669",
+            font=("Arial", 13),
             command=lambda r=record: update_medical_record_dialog(r, doctor_info, lambda: refresh_records_table(doctor_info, table_frame))
         )
         update_button.pack(side="left", padx=2)

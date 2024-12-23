@@ -774,7 +774,7 @@ def refresh_audit_logs(patient_info, table_frame, action_filter="All Actions"):
             # Doctor Name
             ctk.CTkLabel(
                 row_frame,
-                text=f"Dr. {log['doctorName']}",
+                text=f"{log['doctorName']}",
                 width=150,
                 anchor="w"
             ).pack(side="left", padx=5)
